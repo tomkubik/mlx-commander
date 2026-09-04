@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${DIR}/.venv/bin/python" ]; then
+    exec "${DIR}/.venv/bin/python" -m hf2mlx.cli "$@"
+else
+    exec python3 -m hf2mlx.cli "$@"
+fi

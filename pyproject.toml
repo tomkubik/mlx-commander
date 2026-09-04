@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hf2mlx"
+version = "0.1.0"
+description = "CLI & TUI tool to convert Hugging Face datasets into Apple MLX dataset formats"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "MLX Dataset Converter Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.optional-dependencies]
+all = [
+    "datasets>=2.14.0",
+    "pyarrow>=12.0.0",
+]
+
+[project.scripts]
+hf2mlx = "hf2mlx.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["hf2mlx*"]

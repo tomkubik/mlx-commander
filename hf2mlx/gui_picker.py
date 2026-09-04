@@ -1,0 +1,188 @@
+"""
+GUI File and Folder Picker for macOS.
+Compiles the native Cocoa NSOpenPanel helper on-the-fly at runtime into /tmp,
+ensuring zero pre-compiled binaries exist in the project repository.
+"""
+
+import os
+import platform
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Optional
+
+
+def is_macos() -> bool:
+    return platform.system() == "Darwin"
+
+
+def _clean_path(path_str: Optional[str]) -> Optional[str]:
+    if not path_str:
+        return None
+    p = path_str.strip()
+    if p and os.path.exists(p):
+        return str(Path(p).resolve())
+    return p if p else None
+
+
+def _compile_picker_at_runtime() -> Optional[str]:
+    """
+    Compile the native Cocoa picker at runtime into a temporary file.
+    Guarantees zero pre-compiled binaries are shipped or stored in the repository.
+    """
+    pkg_dir = Path(__file__).resolve().parent
+    src_path = pkg_dir / "bin" / "mac_picker.m"
+    if not src_path.exists():
+        return None
+
+    uid = os.getuid() if hasattr(os, "getuid") else "user"
+    tmp_bin = Path(tempfile.gettempdir()) / f"hf2mlx_picker_{uid}"
+
+    # Use cached runtime build if source hasn't changed
+    if tmp_bin.exists() and os.access(tmp_bin, os.X_OK):
+        if tmp_bin.stat().st_mtime >= src_path.stat().st_mtime:
+            return str(tmp_bin)
+
+    try:
+        res = subprocess.run(
+            ["clang", "-O2", "-framework", "Cocoa", str(src_path), "-o", str(tmp_bin)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if res.returncode == 0 and tmp_bin.exists():
+            tmp_bin.chmod(0o755)
+            return str(tmp_bin)
+    except Exception:
+        pass
+
+    return None
+
+
+def run_runtime_compiled_picker(mode: str = "both", default_dir: Optional[str] = None, prompt: Optional[str] = None) -> Optional[str]:
+    """
+    Execute the runtime-compiled Cocoa picker.
+    Returns:
+      - Selected path if user picked a file/folder and clicked Select.
+      - None if user cancelled or closed the window (never opens a second window).
+    """
+    picker_bin = _compile_picker_at_runtime()
+    if not picker_bin:
+        return None
+
+    dir_posix = str(Path(default_dir or os.getcwd()).resolve())
+    cmd = [picker_bin, mode, dir_posix]
+    if prompt:
+        cmd.append(prompt)
+
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            out = res.stdout.strip()
+            return _clean_path(out) if out else None
+    except Exception:
+        pass
+
+    return None
+
+
+def pick_dataset_gui(default_dir: Optional[str] = None, prompt: str = "Select Dataset (File or Folder)") -> Optional[str]:
+    """
+    Unified GUI dataset picker.
+    Allows selecting EITHER a dataset folder (save_to_disk) OR a dataset file (.parquet, .jsonl, .arrow, .csv).
+    Compiled dynamically at runtime.
+    """
+    if is_macos():
+        # Primary: runtime-compiled native Cocoa open panel
+        res = run_runtime_compiled_picker(mode="both", default_dir=default_dir, prompt=prompt)
+        if res is not None:
+            return res
+
+        # Fallback to direct AppleScript only if runtime compilation failed
+        if not _compile_picker_at_runtime():
+            dir_posix = str(Path(default_dir or os.getcwd()).resolve())
+            script = f'''
+            try
+                set thePath to choose folder with prompt "{prompt}" default location (POSIX file "{dir_posix}")
+                return POSIX path of thePath
+            on error
+                try
+                    set thePath to choose file with prompt "{prompt}" default location (POSIX file "{dir_posix}")
+                    return POSIX path of thePath
+                on error
+                    return ""
+                end try
+            end try
+            '''
+            try:
+                sub_res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+                if sub_res.returncode == 0:
+                    out = sub_res.stdout.strip()
+                    return _clean_path(out) if out else None
+            except Exception:
+                pass
+
+    return None
+
+
+def pick_folder_gui(prompt: str = "Select Destination Folder", default_dir: Optional[str] = None) -> Optional[str]:
+    """
+    Unified GUI folder picker (e.g. for destination directories).
+    Compiled dynamically at runtime.
+    """
+    if is_macos():
+        res = run_runtime_compiled_picker(mode="folder", default_dir=default_dir, prompt=prompt)
+        if res is not None:
+            return res
+
+        if not _compile_picker_at_runtime():
+            dir_posix = str(Path(default_dir or os.getcwd()).resolve())
+            script = f'''
+            try
+                set thePath to choose folder with prompt "{prompt}" default location (POSIX file "{dir_posix}")
+                return POSIX path of thePath
+            on error
+                return ""
+            end try
+            '''
+            try:
+                sub_res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+                if sub_res.returncode == 0:
+                    out = sub_res.stdout.strip()
+                    return _clean_path(out) if out else None
+            except Exception:
+                pass
+
+    return None
+
+
+def pick_file_gui(prompt: str = "Select Dataset File", default_dir: Optional[str] = None) -> Optional[str]:
+    """
+    Unified GUI file picker (specifically for data files).
+    Compiled dynamically at runtime.
+    """
+    if is_macos():
+        res = run_runtime_compiled_picker(mode="file", default_dir=default_dir, prompt=prompt)
+        if res is not None:
+            return res
+
+        if not _compile_picker_at_runtime():
+            dir_posix = str(Path(default_dir or os.getcwd()).resolve())
+            script = f'''
+            try
+                set thePath to choose file with prompt "{prompt}" default location (POSIX file "{dir_posix}")
+                return POSIX path of thePath
+            on error
+                return ""
+            end try
+            '''
+            try:
+                sub_res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+                if sub_res.returncode == 0:
+                    out = sub_res.stdout.strip()
+                    return _clean_path(out) if out else None
+            except Exception:
+                pass
+
+    return None
