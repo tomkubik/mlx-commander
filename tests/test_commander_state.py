@@ -28,7 +28,7 @@ class TestCommanderState(unittest.TestCase):
         self.assertEqual(state.train_pct, 80.0)
         self.assertEqual(state.valid_pct, 10.0)
         self.assertEqual(state.test_pct, 10.0)
-        self.assertEqual(state.active_panel, ActivePanel.RIGHT)
+        self.assertEqual(state.active_panel, ActivePanel.LEFT)
 
     def test_load_dataset_and_auto_mapping(self):
         state = CommanderState()

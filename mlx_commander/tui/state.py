@@ -46,14 +46,14 @@ class CommanderState:
     output_dir: str = "./mlx_dataset"
 
     # UI navigation state
-    active_panel: ActivePanel = ActivePanel.RIGHT
+    active_panel: ActivePanel = ActivePanel.LEFT
     left_focus_idx: int = 0   # 0: Browse button, 1: Edit path button, 2: Columns list
     right_focus_idx: int = 0  # 0: Format, 1-3: Mappings, 4-6: Splits, 7: Seed, 8: Output, 9: Convert button
     column_scroll_offset: int = 0
     selected_column_idx: int = 0
 
     # Status / notification
-    status_message: str = "Ready. Press Tab to switch panels, ↑/↓ to navigate, F5 to convert."
+    status_message: str = "Ready. Select [Finder (F2)] or press Enter to choose your dataset."
     status_is_error: bool = False
 
     # Reactive preview cache
