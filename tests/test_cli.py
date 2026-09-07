@@ -107,6 +107,15 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(p.returncode, 0, f"Command failed: {cmd}, stderr: {p.stderr}")
             self.assertIn("mlx-commander", p.stdout)
 
+    def test_cli_no_fallback_to_wizard_on_tui_error(self):
+        from unittest.mock import patch
+        with patch("mlx_commander.cli.launch_tui", side_effect=RuntimeError("curses failed")):
+            with patch("mlx_commander.cli.run_interactive_wizard") as mock_wizard:
+                ret = main(["-d", str(self.src_file)])
+                self.assertEqual(ret, 1)
+                # Ensure the interactive wizard is NEVER called as a fallback
+                mock_wizard.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

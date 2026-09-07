@@ -245,8 +245,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    # Case 2: Sequential wizard explicitly requested via --wizard or when non-interactive
-    if args.wizard or not is_interactive_tty():
+    # Case 2: Sequential wizard explicitly requested via --wizard / --no-tui / --cli
+    if args.wizard:
         try:
             run_interactive_wizard(
                 dataset_path=dataset_input,
@@ -268,18 +268,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Case 3: Default — Launch persistent MLX-Commander full-screen TUI dashboard
     try:
         result = launch_tui(default_dataset_path=dataset_input)
-        return 0 if result is not None else 130
-    except (KeyboardInterrupt, curses.error):
+        return 0
+    except (KeyboardInterrupt, EOFError):
         print("\nOperation cancelled.")
         return 130
+    except curses.error as e:
+        print(f"\nTerminal error: {e}", file=sys.stderr)
+        return 1
     except Exception as e:
-        print(f"\nTerminal notice: {e}. Falling back to CLI wizard...", file=sys.stderr)
-        try:
-            run_interactive_wizard(dataset_path=dataset_input)
-            return 0
-        except (KeyboardInterrupt, EOFError):
-            print("\nOperation cancelled.")
-            return 130
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

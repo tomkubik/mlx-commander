@@ -46,6 +46,7 @@ from mlx_commander.tui.widgets import (
     get_color,
     safe_addstr,
     show_column_picker_dialog,
+    show_error_dialog,
     show_help_dialog,
     show_message_dialog,
     show_results_dialog,
@@ -77,12 +78,14 @@ def execute_conversion(stdscr: curses.window, state: CommanderState) -> Optional
     if not state.loaded_dataset:
         state.status_message = "Please load a dataset before converting."
         state.status_is_error = True
+        show_error_dialog(stdscr, "Conversion Error", "Please load a dataset before converting.")
         return None
 
     errors = validate_mapping(state.target_format, state.mapping, state.loaded_dataset.columns)
     if errors:
         state.status_message = f"Cannot convert: {errors[0]}"
         state.status_is_error = True
+        show_error_dialog(stdscr, "Cannot Convert", errors)
         return None
 
     state.status_message = "Converting dataset and writing JSONL files..."
@@ -108,7 +111,7 @@ def execute_conversion(stdscr: curses.window, state: CommanderState) -> Optional
         state.status_is_error = False
         return res
     except Exception as e:
-        show_message_dialog(stdscr, "Conversion Error", [f"Error: {e}"], is_error=True)
+        show_error_dialog(stdscr, "Conversion Error", str(e))
         state.status_message = f"Conversion error: {e}"
         state.status_is_error = True
         return None
@@ -501,147 +504,154 @@ def run_commander_tui(
         elif key in (27, ord("q"), ord("Q"), curses.KEY_F10):
             break
 
-        elif key in (ord("?"), curses.KEY_F1):
-            show_help_dialog(stdscr)
+        try:
+            if key in (ord("?"), curses.KEY_F1):
+                show_help_dialog(stdscr)
 
-        elif key in (curses.KEY_F2, 15):  # F2 or Ctrl+O
-            curses.def_prog_mode()
-            curses.endwin()
-            from mlx_commander.gui_picker import pick_dataset_gui
-            chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
-            curses.reset_prog_mode()
-            stdscr.refresh()
-            if chosen:
-                if not state.load_dataset(chosen):
-                    show_results_dialog(stdscr, False, f"{state.status_message}")
+            elif key in (curses.KEY_F2, 15):  # F2 or Ctrl+O
+                curses.def_prog_mode()
+                curses.endwin()
+                from mlx_commander.gui_picker import pick_dataset_gui
+                chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
+                curses.reset_prog_mode()
+                stdscr.refresh()
+                if chosen:
+                    if not state.load_dataset(chosen):
+                        show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
 
-        elif key == curses.KEY_F5:
-            res = execute_conversion(stdscr, state)
-            if res is not None:
-                conversion_result = res
+            elif key == curses.KEY_F5:
+                res = execute_conversion(stdscr, state)
+                if res is not None:
+                    conversion_result = res
 
-        elif key in (ord("r"), ord("R")):
-            state.randomize_seed()
+            elif key in (ord("r"), ord("R")):
+                state.randomize_seed()
 
-        elif key in (9, curses.KEY_BTAB):  # Tab / Shift-Tab
-            state.active_panel = ActivePanel.RIGHT if state.active_panel == ActivePanel.LEFT else ActivePanel.LEFT
+            elif key in (9, curses.KEY_BTAB):  # Tab / Shift-Tab
+                state.active_panel = ActivePanel.RIGHT if state.active_panel == ActivePanel.LEFT else ActivePanel.LEFT
 
-        # Navigation in Left Panel
-        elif is_left:
-            if key in (curses.KEY_UP, ord("k")):
-                if state.left_focus_idx == 2 and state.selected_column_idx > 0:
-                    state.selected_column_idx -= 1
-                else:
-                    state.left_focus_idx = max(0, state.left_focus_idx - 1)
-            elif key in (curses.KEY_DOWN, ord("j")):
-                if state.left_focus_idx == 2:
-                    if state.loaded_dataset and state.selected_column_idx < len(state.loaded_dataset.columns) - 1:
-                        state.selected_column_idx += 1
-                else:
-                    state.left_focus_idx = min(2, state.left_focus_idx + 1)
-            elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
-                if state.left_focus_idx == 0:  # Finder button
-                    curses.def_prog_mode()
-                    curses.endwin()
-                    from mlx_commander.gui_picker import pick_dataset_gui
-                    chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
-                    curses.reset_prog_mode()
-                    stdscr.refresh()
-                    if chosen:
-                        if not state.load_dataset(chosen):
-                            show_results_dialog(stdscr, False, f"{state.status_message}")
-                elif state.left_focus_idx == 1:  # Edit path
-                    new_path = show_text_edit_dialog(
-                        stdscr,
-                        "Change Dataset Path",
-                        "Enter path(s) to local HF dataset (comma/newline separated for multiple):",
-                        default_val=state.dataset_path or os.getcwd(),
-                    )
-                    if new_path:
-                        if not state.load_dataset(new_path):
-                            show_results_dialog(stdscr, False, f"{state.status_message}")
+            # Navigation in Left Panel
+            elif is_left:
+                if key in (curses.KEY_UP, ord("k")):
+                    if state.left_focus_idx == 2 and state.selected_column_idx > 0:
+                        state.selected_column_idx -= 1
+                    else:
+                        state.left_focus_idx = max(0, state.left_focus_idx - 1)
+                elif key in (curses.KEY_DOWN, ord("j")):
+                    if state.left_focus_idx == 2:
+                        if state.loaded_dataset and state.selected_column_idx < len(state.loaded_dataset.columns) - 1:
+                            state.selected_column_idx += 1
+                    else:
+                        state.left_focus_idx = min(2, state.left_focus_idx + 1)
+                elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
+                    if state.left_focus_idx == 0:  # Finder button
+                        curses.def_prog_mode()
+                        curses.endwin()
+                        from mlx_commander.gui_picker import pick_dataset_gui
+                        chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
+                        curses.reset_prog_mode()
+                        stdscr.refresh()
+                        if chosen:
+                            if not state.load_dataset(chosen):
+                                show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
+                    elif state.left_focus_idx == 1:  # Edit path
+                        new_path = show_text_edit_dialog(
+                            stdscr,
+                            "Change Dataset Path",
+                            "Enter path(s) to local HF dataset (comma/newline separated for multiple):",
+                            default_val=state.dataset_path or os.getcwd(),
+                        )
+                        if new_path:
+                            if not state.load_dataset(new_path):
+                                show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
 
-        # Navigation in Right Panel
-        elif is_right:
-            if key in (curses.KEY_UP, ord("k")):
-                state.right_focus_idx = (state.right_focus_idx - 1) % total_right_fields
-            elif key in (curses.KEY_DOWN, ord("j")):
-                state.right_focus_idx = (state.right_focus_idx + 1) % total_right_fields
-            elif key in (curses.KEY_LEFT, ord("h")):
-                if state.right_focus_idx == 0:
-                    # Cycle format backwards
-                    curr_i = formats_list.index(state.target_format)
-                    state.set_format(formats_list[(curr_i - 1) % len(formats_list)])
-            elif key in (curses.KEY_RIGHT, ord("l")):
-                if state.right_focus_idx == 0:
-                    # Cycle format forwards
-                    curr_i = formats_list.index(state.target_format)
-                    state.set_format(formats_list[(curr_i + 1) % len(formats_list)])
+            # Navigation in Right Panel
+            elif is_right:
+                if key in (curses.KEY_UP, ord("k")):
+                    state.right_focus_idx = (state.right_focus_idx - 1) % total_right_fields
+                elif key in (curses.KEY_DOWN, ord("j")):
+                    state.right_focus_idx = (state.right_focus_idx + 1) % total_right_fields
+                elif key in (curses.KEY_LEFT, ord("h")):
+                    if state.right_focus_idx == 0:
+                        # Cycle format backwards
+                        curr_i = formats_list.index(state.target_format)
+                        state.set_format(formats_list[(curr_i - 1) % len(formats_list)])
+                elif key in (curses.KEY_RIGHT, ord("l")):
+                    if state.right_focus_idx == 0:
+                        # Cycle format forwards
+                        curr_i = formats_list.index(state.target_format)
+                        state.set_format(formats_list[(curr_i + 1) % len(formats_list)])
 
-            elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
-                idx = state.right_focus_idx
-                if idx == 0:
-                    # Toggle next format
-                    curr_i = formats_list.index(state.target_format)
-                    state.set_format(formats_list[(curr_i + 1) % len(formats_list)])
+                elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
+                    idx = state.right_focus_idx
+                    if idx == 0:
+                        # Toggle next format
+                        curr_i = formats_list.index(state.target_format)
+                        state.set_format(formats_list[(curr_i + 1) % len(formats_list)])
 
-                elif 1 <= idx <= len(mapping_fields):
-                    # Column mapping picker
-                    f_info = mapping_fields[idx - 1]
-                    cols = state.loaded_dataset.columns if state.loaded_dataset else []
-                    chosen = show_column_picker_dialog(
-                        stdscr,
-                        f"Select Column for '{f_info['label']}'",
-                        cols,
-                        current_val=f_info["current"],
-                        allow_none=True,
-                    )
-                    state.set_mapping_field(f_info["key"], chosen)
+                    elif 1 <= idx <= len(mapping_fields):
+                        # Column mapping picker
+                        f_info = mapping_fields[idx - 1]
+                        cols = state.loaded_dataset.columns if state.loaded_dataset else []
+                        chosen = show_column_picker_dialog(
+                            stdscr,
+                            f"Select Column for '{f_info['label']}'",
+                            cols,
+                            current_val=f_info["current"],
+                            allow_none=True,
+                        )
+                        state.set_mapping_field(f_info["key"], chosen)
 
-                elif idx == 1 + len(mapping_fields):  # Train %
-                    val = show_text_edit_dialog(stdscr, "Train Split %", "Enter Train percentage (0-100):", f"{state.train_pct:.0f}", is_number=True)
-                    if val:
-                        try:
-                            state.train_pct = float(val)
-                        except ValueError:
-                            pass
+                    elif idx == 1 + len(mapping_fields):  # Train %
+                        val = show_text_edit_dialog(stdscr, "Train Split %", "Enter Train percentage (0-100):", f"{state.train_pct:.0f}", is_number=True)
+                        if val:
+                            try:
+                                state.train_pct = float(val)
+                            except ValueError:
+                                pass
 
-                elif idx == 2 + len(mapping_fields):  # Valid %
-                    val = show_text_edit_dialog(stdscr, "Valid Split %", "Enter Valid percentage (0-100):", f"{state.valid_pct:.0f}", is_number=True)
-                    if val:
-                        try:
-                            state.valid_pct = float(val)
-                        except ValueError:
-                            pass
+                    elif idx == 2 + len(mapping_fields):  # Valid %
+                        val = show_text_edit_dialog(stdscr, "Valid Split %", "Enter Valid percentage (0-100):", f"{state.valid_pct:.0f}", is_number=True)
+                        if val:
+                            try:
+                                state.valid_pct = float(val)
+                            except ValueError:
+                                pass
 
-                elif idx == 3 + len(mapping_fields):  # Test %
-                    val = show_text_edit_dialog(stdscr, "Test Split %", "Enter Test percentage (0-100):", f"{state.test_pct:.0f}", is_number=True)
-                    if val:
-                        try:
-                            state.test_pct = float(val)
-                        except ValueError:
-                            pass
+                    elif idx == 3 + len(mapping_fields):  # Test %
+                        val = show_text_edit_dialog(stdscr, "Test Split %", "Enter Test percentage (0-100):", f"{state.test_pct:.0f}", is_number=True)
+                        if val:
+                            try:
+                                state.test_pct = float(val)
+                            except ValueError:
+                                pass
 
-                elif idx == 4 + len(mapping_fields):  # Seed
-                    val = show_text_edit_dialog(stdscr, "Random Seed", "Enter random seed integer:", str(state.seed), is_number=True)
-                    if val:
-                        try:
-                            state.seed = int(val)
-                        except ValueError:
-                            pass
+                    elif idx == 4 + len(mapping_fields):  # Seed
+                        val = show_text_edit_dialog(stdscr, "Random Seed", "Enter random seed integer:", str(state.seed), is_number=True)
+                        if val:
+                            try:
+                                state.seed = int(val)
+                            except ValueError:
+                                pass
 
-                elif idx == 5 + len(mapping_fields):  # Randomize button
-                    state.randomize_seed()
+                    elif idx == 5 + len(mapping_fields):  # Randomize button
+                        state.randomize_seed()
 
-                elif idx == 6 + len(mapping_fields):  # Output Dir
-                    val = show_text_edit_dialog(stdscr, "Output Directory", "Enter folder to save MLX JSONL datasets:", state.output_dir)
-                    if val:
-                        state.output_dir = val.strip()
+                    elif idx == 6 + len(mapping_fields):  # Output Dir
+                        val = show_text_edit_dialog(stdscr, "Output Directory", "Enter folder to save MLX JSONL datasets:", state.output_dir)
+                        if val:
+                            state.output_dir = val.strip()
 
-                elif idx == 7 + len(mapping_fields):  # Convert button
-                    res = execute_conversion(stdscr, state)
-                    if res is not None:
-                        conversion_result = res
+                    elif idx == 7 + len(mapping_fields):  # Convert button
+                        res = execute_conversion(stdscr, state)
+                        if res is not None:
+                            conversion_result = res
+        except curses.error:
+            pass
+        except Exception as e:
+            state.status_message = f"Error: {e}"
+            state.status_is_error = True
+            show_error_dialog(stdscr, "Error Encountered", str(e))
 
     return conversion_result
 

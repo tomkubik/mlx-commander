@@ -7,7 +7,9 @@ from mlx_commander.tui.app import run_commander_tui
 from mlx_commander.tui.state import ActivePanel, CommanderState
 from mlx_commander.tui.widgets import (
     show_column_picker_dialog,
+    show_error_dialog,
     show_help_dialog,
+    show_message_dialog,
     show_results_dialog,
     show_text_edit_dialog,
 )
@@ -149,6 +151,30 @@ class TestCommanderUI(unittest.TestCase):
         )
         self.mock_win.getch.side_effect = [27]
         show_results_dialog(self.mock_win, res)
+        self.assertTrue(self.mock_win.refresh.called)
+
+    def test_show_error_dialog_dismiss_enter(self):
+        self.mock_win.getch.side_effect = [10]  # Enter key
+        show_error_dialog(self.mock_win, "Test Error", "An unexpected failure occurred.")
+        self.assertTrue(self.mock_win.refresh.called)
+        # Verify double line borders were drawn
+        has_double_border = any("╔" in str(call) for call in self.mock_win.addstr.call_args_list)
+        self.assertTrue(has_double_border)
+
+    def test_show_error_dialog_dismiss_esc(self):
+        self.mock_win.getch.side_effect = [27]  # Esc key
+        show_error_dialog(self.mock_win, "Test Error", ["Line 1", "Line 2"])
+        self.assertTrue(self.mock_win.refresh.called)
+
+    def test_show_results_dialog_resilience_to_legacy_call(self):
+        # Verify calling with (stdscr, False, "error message") doesn't crash with TypeError
+        self.mock_win.getch.side_effect = [10]
+        show_results_dialog(self.mock_win, False, "Dataset Loading Failed")
+        self.assertTrue(self.mock_win.refresh.called)
+
+    def test_show_message_dialog_overlay(self):
+        self.mock_win.getch.side_effect = [10]
+        show_message_dialog(self.mock_win, "Notice", ["Everything is okay."])
         self.assertTrue(self.mock_win.refresh.called)
 
     def test_configure_escdelay(self):

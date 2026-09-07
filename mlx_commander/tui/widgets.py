@@ -263,30 +263,129 @@ def run_text_input(
             cursor_pos += 1
 
 
+def show_error_dialog(
+    stdscr: curses.window,
+    title: str,
+    message: Any,
+) -> None:
+    """
+    Display a centered modal error dialog overlay on top of MLX Commander.
+    Preserves the background dashboard without erasing the screen.
+    """
+    import textwrap
+    configure_escdelay(25)
+    safe_curs_set(0)
+
+    max_y, max_x = stdscr.getmaxyx()
+
+    if isinstance(message, str):
+        raw_lines = [l for l in message.split("\n")]
+    elif isinstance(message, (list, tuple)):
+        raw_lines = [str(m) for m in message]
+    else:
+        raw_lines = [str(message)]
+
+    w = min(max_x - 6, 76)
+    w = max(40, w)
+    inner_w = w - 6
+
+    wrapped_lines: List[str] = []
+    for line in raw_lines:
+        if not line.strip():
+            wrapped_lines.append("")
+            continue
+        wrapped = textwrap.wrap(line, width=inner_w, break_long_words=True)
+        wrapped_lines.extend(wrapped if wrapped else [""])
+
+    max_text_lines = max(1, min(len(wrapped_lines), max_y - 8))
+    h = max_text_lines + 5
+
+    start_y = max(1, (max_y - h) // 2)
+    start_x = max(1, (max_x - w) // 2)
+
+    border_attr = (get_color(5) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+    title_attr = (get_color(5) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    text_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else 0
+
+    while True:
+        safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", border_attr)
+        title_str = f" [!] {title} "[: w - 4]
+        safe_addstr(stdscr, start_y, start_x + 2, title_str, title_attr)
+
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", border_attr)
+
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", border_attr)
+
+        for idx in range(max_text_lines):
+            safe_addstr(stdscr, start_y + 2 + idx, start_x + 3, wrapped_lines[idx][:inner_w], text_attr)
+
+        hint = "[Enter] OK   [Esc] Dismiss"
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, curses.A_STANDOUT)
+
+        stdscr.refresh()
+
+        k = stdscr.getch()
+        if k in (10, 13, 32, 27, ord("q"), ord("Q")):
+            break
+
+
 def show_message_dialog(
     stdscr: curses.window,
     title: str,
     message_lines: List[str],
     is_error: bool = False,
 ) -> None:
-    """Display an informational or error modal dialog and wait for any key."""
+    """Display an informational or error modal dialog overlay on top of the screen."""
+    if is_error:
+        show_error_dialog(stdscr, title, message_lines)
+        return
+
+    import textwrap
+    configure_escdelay(25)
     safe_curs_set(0)
-    stdscr.erase()
-    draw_header(stdscr, title, "Notice")
+
     max_y, max_x = stdscr.getmaxyx()
+    w = min(max_x - 6, 76)
+    w = max(40, w)
+    inner_w = w - 6
 
-    attr = (get_color(5) | curses.A_BOLD) if (is_error and safe_has_colors()) else (get_color(3) | curses.A_BOLD)
+    wrapped_lines: List[str] = []
+    for line in message_lines:
+        wrapped = textwrap.wrap(str(line), width=inner_w, break_long_words=True)
+        wrapped_lines.extend(wrapped if wrapped else [""])
 
-    safe_addstr(stdscr, 3, 2, "┌" + "─" * (max_x - 6) + "┐", curses.A_DIM)
-    for idx, line in enumerate(message_lines):
-        if 4 + idx >= max_y - 4:
+    max_text_lines = max(1, min(len(wrapped_lines), max_y - 8))
+    h = max_text_lines + 5
+
+    start_y = max(1, (max_y - h) // 2)
+    start_x = max(1, (max_x - w) // 2)
+
+    border_attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+    title_attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    text_attr = get_color(4) if safe_has_colors() else 0
+
+    while True:
+        safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", border_attr)
+        title_str = f" {title} "[: w - 4]
+        safe_addstr(stdscr, start_y, start_x + 2, title_str, title_attr)
+
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", border_attr)
+
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", border_attr)
+
+        for idx in range(max_text_lines):
+            safe_addstr(stdscr, start_y + 2 + idx, start_x + 3, wrapped_lines[idx][:inner_w], text_attr)
+
+        hint = "[Enter] OK   [Esc] Dismiss"
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, curses.A_STANDOUT)
+
+        stdscr.refresh()
+
+        k = stdscr.getch()
+        if k in (10, 13, 32, 27, ord("q"), ord("Q")):
             break
-        safe_addstr(stdscr, 4 + idx, 4, line, attr if idx == 0 and is_error else 0)
-
-    safe_addstr(stdscr, max_y - 4, 2, "└" + "─" * (max_x - 6) + "┘", curses.A_DIM)
-    draw_footer(stdscr, "Press any key to continue...")
-    stdscr.refresh()
-    stdscr.getch()
 
 
 def draw_box_panel(
@@ -595,8 +694,13 @@ def show_text_edit_dialog(
             cursor_pos += 1
 
 
-def show_results_dialog(stdscr: curses.window, result: Any) -> None:
+def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
     """Modal dialog displaying conversion results and mlx_lm.lora command."""
+    if not hasattr(result, "output_dir") or result is False:
+        msg = args[0] if args else (str(result) if result else "Operation failed.")
+        show_error_dialog(stdscr, "Operation Error", msg)
+        return
+
     configure_escdelay(25)
     safe_curs_set(0)
     max_y, max_x = stdscr.getmaxyx()
