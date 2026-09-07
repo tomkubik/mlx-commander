@@ -29,10 +29,25 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 
 ### 1. Launch MLX-Commander (Default)
 
+Launch the interactive dashboard using any of these equivalent commands:
+
 ```bash
+# Recommended for ZIP downloads (no chmod needed, no -m parameter):
+python3 run.py
+
+# Or execute current folder directly:
+python3 .
+
+# Or as a Python package module:
+python3 -m hf2mlx
+
+# Or via shell wrapper:
 ./hf2mlx_cli
-# or with a pre-loaded dataset:
-./hf2mlx_cli -d /path/to/my_hf_dataset
+```
+
+You can also pass arguments directly (e.g. pre-loading a dataset):
+```bash
+python3 run.py -d /path/to/my_hf_dataset
 ```
 
 ### 2. Line-by-Line Wizard Mode

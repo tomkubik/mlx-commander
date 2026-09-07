@@ -28,6 +28,7 @@ all = [
 
 [project.scripts]
 hf2mlx = "hf2mlx.cli:main"
+mlx-commander = "hf2mlx.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["hf2mlx*"]

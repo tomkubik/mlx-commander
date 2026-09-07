@@ -1,15 +1,9 @@
-#!/usr/bin/env bash
-""":"
-# Bash execution path:
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "${DIR}/.venv/bin/python" ]; then
-    exec "${DIR}/.venv/bin/python" "$0" "$@"
-else
-    exec python3 "$0" "$@"
-fi
-exit $?
-":"""
-# Python execution path:
+#!/usr/bin/env python3
+"""Launcher for MLX-Commander.
+
+Run directly with Python:
+    python3 run.py
+"""
 import os
 import sys
 from pathlib import Path

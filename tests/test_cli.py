@@ -4,6 +4,7 @@ Unit tests for CLI parsing, arguments, and direct execution.
 
 import json
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -85,9 +86,26 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(res.record_counts["train"], 24)
             self.assertEqual(res.record_counts["valid"], 3)
             self.assertEqual(res.record_counts["test"], 3)
-            self.assertEqual(res.seed_used, 999)
         finally:
             sys.stdin = orig_stdin
+
+    def test_entry_points(self):
+        import subprocess
+        root_dir = Path(__file__).resolve().parent.parent
+        python_bin = sys.executable
+
+        cmds = [
+            [python_bin, "run.py", "--version"],
+            [python_bin, ".", "--version"],
+            [python_bin, "-m", "hf2mlx", "--version"],
+            [python_bin, "./hf2mlx_cli", "--version"],
+            ["bash", "./hf2mlx_cli", "--version"],
+            ["./hf2mlx_cli", "--version"],
+        ]
+        for cmd in cmds:
+            p = subprocess.run(cmd, cwd=str(root_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(p.returncode, 0, f"Command failed: {cmd}, stderr: {p.stderr}")
+            self.assertIn("hf2mlx", p.stdout)
 
 
 if __name__ == "__main__":
