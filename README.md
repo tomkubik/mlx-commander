@@ -138,23 +138,25 @@ Instead of an agent interrogating users with 10 sequential chat prompts or guess
 
 The user gets a 3-second tactile review with live JSONL preview in the Norton Commander TUI, presses **[F5 Convert]**, and hands control back to the agent with a machine-readable manifest.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. Agent inspects schema & pre-populates config             │
-│    mlx-commander --tui --spawn-terminal --dataset ...       │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. TUI pops up in macOS Terminal.app with live preview       │
-│    User reviews with arrow keys, presses [F5 Convert]       │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. MLX-Commander outputs mlx_manifest.json & exits (code 0) │
-│    Agent reads manifest and immediately launches mlx_lm.lora│
-└─────────────────────────────────────────────────────────────┘
+### 🔄 The End-to-End Workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (Human Developer)
+    participant Agent as AI Agent (Antigravity / Claude / Cursor)
+    participant TUI as MLX-Commander TUI (macOS Terminal)
+    actor MLX as MLX Engine (mlx_lm.lora)
+
+    User->>Agent: "Convert dataset.parquet and fine-tune Llama 3 on it."
+    Agent->>Agent: Inspects schema, picks target format, maps columns & splits
+    Agent->>TUI: Launches TUI with pre-populated arguments (--tui --spawn-terminal)
+    Note over User,TUI: TUI pops up in macOS Terminal with fields pre-filled & live preview rendered.<br/>User reviews with arrow keys, presses [F5 Convert].
+    TUI->>TUI: Converts dataset, writes mlx_dataset/ & mlx_manifest.json
+    TUI-->>Agent: Closes window & returns exit code 0
+    Agent->>Agent: Reads mlx_manifest.json (split counts, paths, lora command)
+    Agent->>User: "Dataset converted (8,000 train / 1,000 valid / 1,000 test). Starting LoRA training..."
+    Agent->>MLX: Executes mlx_lm.lora training run
 ```
 
 ---

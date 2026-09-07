@@ -21,9 +21,28 @@ Trigger this skill whenever the user:
 - Asks how to format data for Llama, Mistral, Qwen, or Phi on a Mac.
 - Asks to split a dataset into train / valid / test for MLX.
 
----
-
 ## The 4-Step Agent Workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (Human Developer)
+    participant Agent as AI Agent (Antigravity / Claude / Cursor)
+    participant TUI as MLX-Commander TUI (macOS Terminal)
+    actor MLX as MLX Engine (mlx_lm.lora)
+
+    User->>Agent: "Convert dataset.parquet and fine-tune Llama 3 on it."
+    Agent->>Agent: Inspects schema, picks target format, maps columns & splits
+    Agent->>TUI: Launches TUI with pre-populated arguments (--tui --spawn-terminal)
+    Note over User,TUI: TUI pops up in macOS Terminal with fields pre-filled & live preview rendered.<br/>User reviews with arrow keys, presses [F5 Convert].
+    TUI->>TUI: Converts dataset, writes mlx_dataset/ & mlx_manifest.json
+    TUI-->>Agent: Closes window & returns exit code 0
+    Agent->>Agent: Reads mlx_manifest.json (split counts, paths, lora command)
+    Agent->>User: "Dataset converted (8,000 train / 1,000 valid / 1,000 test). Starting LoRA training..."
+    Agent->>MLX: Executes mlx_lm.lora training run
+```
+
+---
 
 ### Step 1: Inspect the Dataset Schema
 
