@@ -65,6 +65,21 @@ def parse_mapping_arg(mapping_str: str) -> ColumnMapping:
     return mapping
 
 
+def parse_prefill_state(val: str) -> dict:
+    """Parse prefill state from a JSON string or file path."""
+    clean = val.strip()
+    if clean.startswith("{"):
+        return json.loads(clean)
+    p = Path(clean).expanduser()
+    if p.exists() and p.is_file():
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    try:
+        return json.loads(clean)
+    except Exception as e:
+        raise ValueError(f"Could not parse --prefill-state as JSON or file path: {e}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mlx-commander",
@@ -129,6 +144,30 @@ Examples:
     parser.add_argument("--system-col", type=str, help="Source column for system prompt in chat format.")
     parser.add_argument("--chosen-col", type=str, help="Source column for chosen response in DPO format.")
     parser.add_argument("--rejected-col", type=str, help="Source column for rejected response in DPO format.")
+
+    # Agent & Hand-off flags
+    parser.add_argument(
+        "--manifest-file",
+        type=str,
+        default=None,
+        help="Custom file path where machine-readable mlx_manifest.json will be saved.",
+    )
+    parser.add_argument(
+        "--prefill-state",
+        type=str,
+        default=None,
+        help="Pre-populate TUI state from a JSON string or path to JSON file.",
+    )
+    parser.add_argument(
+        "--spawn-terminal",
+        action="store_true",
+        help="Spawn interactive TUI in an external macOS Terminal window (ideal for AI agents & subshells).",
+    )
+    parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Launch Model Context Protocol (MCP) server over stdio for Claude Desktop, Cursor, etc.",
+    )
 
     # UI mode flags
     parser.add_argument(
@@ -203,6 +242,7 @@ def run_direct_conversion(args: argparse.Namespace) -> ConversionResult:
         output_dir=out_dir,
         split_config=split_config,
         use_existing_splits=args.keep_splits,
+        manifest_file=getattr(args, "manifest_file", None),
     )
 
 
@@ -220,6 +260,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.mcp:
+        from mlx_commander.mcp_server import run_mcp_server
+        return run_mcp_server()
+
     # Normalize dataset path argument
     dataset_input = None
     if args.dataset:
@@ -229,7 +273,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             dataset_input = args.dataset
 
     # Case 1: Direct Headless Run (dataset and format specified, without explicit UI flags)
-    if args.dataset and args.format and not args.wizard and not args.commander:
+    if args.dataset and args.format and not args.wizard and not args.commander and not args.spawn_terminal:
         try:
             result = run_direct_conversion(args)
             src_desc = f"{len(args.dataset)} files (merged)" if isinstance(args.dataset, list) and len(args.dataset) > 1 else (args.dataset[0] if isinstance(args.dataset, list) else str(args.dataset))
@@ -237,6 +281,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             for s_name, path in result.output_files.items():
                 cnt = result.record_counts.get(s_name, 0)
                 print(f"  • {path.name}: {cnt:,} records")
+            if result.manifest_path:
+                print(f"  • Manifest: {result.manifest_path}")
             print(f"\nMLX Fine-tuning command:\n{result.generate_mlx_lora_command()}\n")
             return 0
         except KeyboardInterrupt:
@@ -266,10 +312,85 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"\nError: {e}", file=sys.stderr)
             return 1
 
-    # Case 3: Default — Launch persistent MLX-Commander full-screen TUI dashboard
+    # Case 3: Interactive TUI Dashboard (with optional prefill and Terminal Spawner)
+    prefill_dict: Dict[str, Any] = {}
+    if args.prefill_state:
+        try:
+            prefill_dict.update(parse_prefill_state(args.prefill_state))
+        except Exception as e:
+            print(f"Error parsing --prefill-state: {e}", file=sys.stderr)
+            return 1
+
+    if args.format:
+        prefill_dict["format"] = args.format
+    if args.prompt_col:
+        prefill_dict["prompt_col"] = args.prompt_col
+    if args.completion_col:
+        prefill_dict["completion_col"] = args.completion_col
+    if args.text_col:
+        prefill_dict["text_col"] = args.text_col
+    if args.text_template:
+        prefill_dict["text_template"] = args.text_template
+    if args.messages_col:
+        prefill_dict["messages_col"] = args.messages_col
+    if args.user_col:
+        prefill_dict["user_col"] = args.user_col
+    if args.assistant_col:
+        prefill_dict["assistant_col"] = args.assistant_col
+    if args.system_col:
+        prefill_dict["system_col"] = args.system_col
+    if args.chosen_col:
+        prefill_dict["chosen_col"] = args.chosen_col
+    if args.rejected_col:
+        prefill_dict["rejected_col"] = args.rejected_col
+    if args.train is not None:
+        prefill_dict["train"] = args.train
+    if args.valid is not None:
+        prefill_dict["valid"] = args.valid
+    if args.test is not None:
+        prefill_dict["test"] = args.test
+    if args.seed is not None:
+        prefill_dict["seed"] = args.seed
+    if args.output:
+        prefill_dict["output"] = args.output
+    if dataset_input:
+        prefill_dict["dataset"] = dataset_input
+
+    # Check if external terminal window should be spawned
+    from mlx_commander.terminal_spawner import is_macos, spawn_terminal_tui
+    should_spawn = args.spawn_terminal or (not is_interactive_tty() and is_macos())
+
+    if should_spawn:
+        raw_args = list(sys.argv[1:] if argv is None else argv)
+        return spawn_terminal_tui(raw_args, manifest_path=args.manifest_file)
+
+    if not is_interactive_tty():
+        print(
+            "Error: No interactive terminal (TTY) detected.\n"
+            "On macOS, use --spawn-terminal to launch in Terminal.app, or specify --format for headless conversion.",
+            file=sys.stderr,
+        )
+        return 1
+
     try:
-        result = launch_tui(default_dataset_path=dataset_input)
-        return 0
+        result = launch_tui(default_dataset_path=dataset_input, prefill=prefill_dict)
+        if result is not None:
+            if args.manifest_file:
+                result.save_manifest(args.manifest_file)
+            print(f"\n[OK] Successfully converted dataset to {result.format_type.value} format in {result.output_dir}")
+            if result.manifest_path:
+                print(f"  • Manifest: {result.manifest_path}")
+            return 0
+        else:
+            if args.manifest_file:
+                try:
+                    Path(args.manifest_file).parent.mkdir(parents=True, exist_ok=True)
+                    with open(args.manifest_file, "w", encoding="utf-8") as f:
+                        json.dump({"status": "cancelled"}, f, indent=2)
+                except Exception:
+                    pass
+            print("\nOperation cancelled.")
+            return 130
     except (KeyboardInterrupt, EOFError):
         print("\nOperation cancelled.")
         return 130

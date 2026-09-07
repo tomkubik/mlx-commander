@@ -77,7 +77,7 @@ class CommanderState:
             else:
                 self.output_dir = str(Path.cwd() / "mlx_dataset")
 
-    def load_dataset(self, path_input: Any) -> bool:
+    def load_dataset(self, path_input: Any, custom_mapping: Optional[ColumnMapping] = None) -> bool:
         """Load dataset from disk (single file/folder or multiple merged files) and update state."""
         if not path_input:
             self.status_message = "Path cannot be empty."
@@ -94,7 +94,20 @@ class CommanderState:
             self.column_scroll_offset = 0
 
             # Auto-detect column mapping for current format
-            self.mapping = auto_detect_mapping(self.target_format, ds.columns)
+            auto = auto_detect_mapping(self.target_format, ds.columns)
+            if custom_mapping is not None:
+                self.mapping = custom_mapping
+                # Backfill unset fields from auto detection
+                for attr in (
+                    "prompt_col", "completion_col", "text_col", "text_template",
+                    "messages_col", "user_col", "assistant_col", "system_col",
+                    "chosen_col", "rejected_col"
+                ):
+                    if not getattr(self.mapping, attr, None) and getattr(auto, attr, None):
+                        setattr(self.mapping, attr, getattr(auto, attr))
+            else:
+                self.mapping = auto
+
             if not self.has_custom_output_dir:
                 self.output_dir = str(ds.default_output_dir)
             if "Merged (" in ds.source_path:
@@ -108,6 +121,88 @@ class CommanderState:
             self.status_message = f"Failed to load: {e}"
             self.status_is_error = True
             return False
+
+    def apply_prefill(self, config: Dict[str, Any]) -> None:
+        """
+        Apply pre-populated configuration (from CLI flags, JSON file, or agent skill).
+        Enables agents to launch the TUI with schema, format, mapping, and splits pre-configured.
+        """
+        if not config:
+            return
+
+        # Target format
+        fmt_val = config.get("format") or config.get("target_format")
+        if fmt_val:
+            if isinstance(fmt_val, MLXFormat):
+                self.target_format = fmt_val
+            elif isinstance(fmt_val, str):
+                try:
+                    self.target_format = MLXFormat(fmt_val.lower().strip())
+                except ValueError:
+                    pass
+
+        # Splits & Seed
+        if "train" in config and config["train"] is not None:
+            self.train_pct = float(config["train"])
+        elif "train_pct" in config and config["train_pct"] is not None:
+            self.train_pct = float(config["train_pct"])
+
+        if "valid" in config and config["valid"] is not None:
+            self.valid_pct = float(config["valid"])
+        elif "valid_pct" in config and config["valid_pct"] is not None:
+            self.valid_pct = float(config["valid_pct"])
+
+        if "test" in config and config["test"] is not None:
+            self.test_pct = float(config["test"])
+        elif "test_pct" in config and config["test_pct"] is not None:
+            self.test_pct = float(config["test_pct"])
+
+        if "seed" in config and config["seed"] is not None:
+            self.seed = int(config["seed"])
+
+        # Output directory
+        out_val = config.get("output") or config.get("output_dir")
+        if out_val:
+            self.output_dir = str(out_val).strip()
+            self.has_custom_output_dir = True
+
+        # Custom Mapping
+        custom_map = config.get("mapping")
+        mapping_obj: Optional[ColumnMapping] = None
+        if isinstance(custom_map, ColumnMapping):
+            mapping_obj = custom_map
+        elif isinstance(custom_map, dict):
+            mapping_obj = ColumnMapping(**custom_map)
+        else:
+            mapping_obj = ColumnMapping()
+
+        map_keys = {
+            "prompt_col": ["prompt_col", "prompt"],
+            "completion_col": ["completion_col", "completion"],
+            "text_col": ["text_col", "text"],
+            "text_template": ["text_template", "template"],
+            "messages_col": ["messages_col", "messages"],
+            "user_col": ["user_col", "user"],
+            "assistant_col": ["assistant_col", "assistant"],
+            "system_col": ["system_col", "system"],
+            "chosen_col": ["chosen_col", "chosen"],
+            "rejected_col": ["rejected_col", "rejected"],
+        }
+        has_custom_field = False
+        for attr, aliases in map_keys.items():
+            for alias in aliases:
+                if alias in config and config[alias]:
+                    setattr(mapping_obj, attr, str(config[alias]).strip())
+                    has_custom_field = True
+                    break
+
+        # Dataset loading
+        ds_path = config.get("dataset") or config.get("dataset_path") or self.dataset_path
+        if ds_path:
+            self.load_dataset(ds_path, custom_mapping=mapping_obj if (custom_map or has_custom_field) else None)
+            # Switch active panel to RIGHT so user immediately sees mappings, splits, and preview
+            self.active_panel = ActivePanel.RIGHT
+            self.right_focus_idx = 0
 
     def set_format(self, fmt: MLXFormat) -> None:
         """Change MLX target format and re-detect mappings if appropriate."""

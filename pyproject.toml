@@ -21,9 +21,13 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+mcp = [
+    "mcp>=1.0.0",
+]
 all = [
     "datasets>=2.14.0",
     "pyarrow>=12.0.0",
+    "mcp>=1.0.0",
 ]
 
 [project.scripts]

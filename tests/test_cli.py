@@ -218,6 +218,39 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertTrue((custom_dir / "train.jsonl").exists())
 
+    def test_cli_manifest_file_flag(self):
+        custom_manifest = Path(self.temp_dir) / "agent_manifest.json"
+        argv = [
+            "-d", str(self.src_file),
+            "-f", "prompt_completion",
+            "-o", str(self.out_dir),
+            "--prompt-col", "instruction",
+            "--completion-col", "output",
+            "--manifest-file", str(custom_manifest),
+        ]
+        ret = main(argv)
+        self.assertEqual(ret, 0)
+        self.assertTrue(custom_manifest.exists())
+        with open(custom_manifest) as f:
+            data = json.load(f)
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["total_records"], 30)
+
+    def test_cli_spawn_terminal_flag_delegates(self):
+        from unittest.mock import patch
+        with patch("mlx_commander.terminal_spawner.spawn_terminal_tui", return_value=0) as mock_spawn:
+            argv = ["--spawn-terminal", "-d", str(self.src_file), "-f", "chat"]
+            ret = main(argv)
+            self.assertEqual(ret, 0)
+            mock_spawn.assert_called_once()
+
+    def test_cli_mcp_flag_delegates(self):
+        from unittest.mock import patch
+        with patch("mlx_commander.mcp_server.run_mcp_server", return_value=0) as mock_mcp:
+            ret = main(["--mcp"])
+            self.assertEqual(ret, 0)
+            mock_mcp.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

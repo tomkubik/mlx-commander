@@ -23,6 +23,8 @@ class ConversionResult:
     file_sizes: Dict[str, int]
     sample_records: Dict[str, List[Dict[str, Any]]]
     seed_used: Optional[int]
+    manifest_path: Optional[Path] = None
+    source_path: Optional[str] = None
 
     def generate_mlx_lora_command(self, model_name: str = "mlx-community/Llama-3.2-3B-Instruct-4bit") -> str:
         """Generate a ready-to-use mlx_lm.lora command line string."""
@@ -35,6 +37,40 @@ class ConversionResult:
             f"    --iters 600 \\\n"
             f"    --batch-size 4"
         )
+
+    def to_manifest_dict(self) -> Dict[str, Any]:
+        """Produce a structured, machine-readable dictionary representing conversion output."""
+        return {
+            "status": "success",
+            "format": self.format_type.value,
+            "source_path": self.source_path or "",
+            "output_dir": str(self.output_dir),
+            "files": {
+                split: {
+                    "path": str(p),
+                    "filename": p.name,
+                    "records": self.record_counts.get(split, 0),
+                    "size_bytes": self.file_sizes.get(split, 0),
+                }
+                for split, p in self.output_files.items()
+            },
+            "splits": self.record_counts,
+            "total_records": sum(self.record_counts.values()),
+            "seed_used": self.seed_used,
+            "mlx_lora_command": self.generate_mlx_lora_command(),
+            "manifest_path": str(self.manifest_path) if self.manifest_path else str(self.output_dir / "mlx_manifest.json"),
+        }
+
+    def save_manifest(self, path: Optional[Union[str, Path]] = None) -> Path:
+        """Write manifest JSON to disk and record manifest_path."""
+        target = Path(path).expanduser().resolve() if path else (self.output_dir / "mlx_manifest.json")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        manifest_data = self.to_manifest_dict()
+        manifest_data["manifest_path"] = str(target)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(manifest_data, f, indent=2, ensure_ascii=False)
+        self.manifest_path = target
+        return target
 
 
 def convert_and_save(
@@ -125,7 +161,7 @@ def convert_and_save(
         file_sizes[split_name] = target_path.stat().st_size
         samples[split_name] = split_samples
 
-    return ConversionResult(
+    res = ConversionResult(
         output_dir=output_dir,
         format_type=format_type,
         output_files=output_files,
@@ -133,4 +169,9 @@ def convert_and_save(
         file_sizes=file_sizes,
         sample_records=samples,
         seed_used=split_config.seed if split_config else None,
+        source_path=getattr(dataset, "source_path", None),
     )
+
+    manifest_file = kwargs.get("manifest_file")
+    res.save_manifest(manifest_file if manifest_file else None)
+    return res

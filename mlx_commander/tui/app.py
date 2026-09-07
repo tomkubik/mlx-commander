@@ -122,6 +122,7 @@ def run_commander_tui(
     stdscr: curses.window,
     default_dataset_path: Optional[str] = None,
     initial_state: Optional[CommanderState] = None,
+    prefill: Optional[Dict[str, Any]] = None,
 ) -> Optional[ConversionResult]:
     """Main event loop for the persistent MLX-Commander dashboard."""
     configure_escdelay(25)
@@ -130,40 +131,44 @@ def run_commander_tui(
     stdscr.keypad(True)
 
     state = initial_state if initial_state is not None else CommanderState()
-    initial_path = default_dataset_path or (state.dataset_path if state.dataset_path else os.getcwd())
 
-    # Attempt to auto-load if valid dataset files are in initial directory
-    try:
-        p = Path(initial_path).resolve()
-        has_dataset = (
-            p.is_file()
-            or any(p.glob("*.parquet"))
-            or any(p.glob("*.jsonl"))
-            or any(p.glob("*.arrow"))
-            or any(p.glob("*.csv"))
-            or any(p.glob("*.tsv"))
-            or any(p.glob("*.sqlite"))
-            or any(p.glob("*.db"))
-            or any(p.glob("*.tar"))
-            or any(p.glob("*.tar.gz"))
-            or any(p.glob("dataset_info.json"))
-        )
-        if has_dataset:
-            state.load_dataset(str(p))
-        else:
-            state.dataset_path = str(p)
+    if prefill:
+        state.apply_prefill(prefill)
+
+    if not state.loaded_dataset:
+        initial_path = default_dataset_path or (state.dataset_path if state.dataset_path else os.getcwd())
+        # Attempt to auto-load if valid dataset files are in initial directory
+        try:
+            p = Path(initial_path).resolve()
+            has_dataset = (
+                p.is_file()
+                or any(p.glob("*.parquet"))
+                or any(p.glob("*.jsonl"))
+                or any(p.glob("*.arrow"))
+                or any(p.glob("*.csv"))
+                or any(p.glob("*.tsv"))
+                or any(p.glob("*.sqlite"))
+                or any(p.glob("*.db"))
+                or any(p.glob("*.tar"))
+                or any(p.glob("*.tar.gz"))
+                or any(p.glob("dataset_info.json"))
+            )
+            if has_dataset:
+                state.load_dataset(str(p))
+            else:
+                state.dataset_path = str(p)
+                if not state.has_custom_output_dir:
+                    base = p if p.is_dir() else p.parent
+                    state.output_dir = str(base / "mlx_dataset")
+        except Exception:
+            state.dataset_path = initial_path
             if not state.has_custom_output_dir:
-                base = p if p.is_dir() else p.parent
-                state.output_dir = str(base / "mlx_dataset")
-    except Exception:
-        state.dataset_path = initial_path
-        if not state.has_custom_output_dir:
-            try:
-                p = Path(initial_path).resolve()
-                base = p if p.is_dir() else p.parent
-                state.output_dir = str(base / "mlx_dataset")
-            except Exception:
-                state.output_dir = str(Path.cwd() / "mlx_dataset")
+                try:
+                    p = Path(initial_path).resolve()
+                    base = p if p.is_dir() else p.parent
+                    state.output_dir = str(base / "mlx_dataset")
+                except Exception:
+                    state.output_dir = str(Path.cwd() / "mlx_dataset")
 
     conversion_result: Optional[ConversionResult] = None
     formats_list = [
@@ -720,10 +725,14 @@ def run_commander_tui(
     return conversion_result
 
 
-def launch_tui(default_dataset_path: Optional[str] = None) -> Optional[ConversionResult]:
-    """Launch the MLX-Commander full-screen curses dashboard."""
+def launch_tui(
+    default_dataset_path: Optional[str] = None,
+    initial_state: Optional[CommanderState] = None,
+    prefill: Optional[Dict[str, Any]] = None,
+) -> Optional[ConversionResult]:
+    """Launch the MLX-Commander full-screen curses dashboard with optional prefill."""
     configure_escdelay(25)
     try:
-        return curses.wrapper(run_commander_tui, default_dataset_path)
+        return curses.wrapper(run_commander_tui, default_dataset_path, initial_state, prefill)
     except KeyboardInterrupt:
         return None

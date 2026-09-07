@@ -117,8 +117,55 @@ usage: mlx-commander [-h] [-v] [-d DATASET [DATASET ...]]
 | `--system-col` | Column for system prompt in multi-column `chat` format. |
 | `--chosen-col` | Column for preferred response in `dpo` format. |
 | `--rejected-col`| Column for dispreferred response in `dpo` format. |
+| `--manifest-file`| Custom file path where machine-readable `mlx_manifest.json` will be saved. |
+| `--prefill-state`| Pre-populate TUI state from a JSON string or path to JSON file. |
+| `--spawn-terminal`| Launch interactive TUI in an external macOS Terminal window. |
+| `--mcp` | Start Model Context Protocol (MCP) server over stdio. |
 | `--tui` | Force launch full-screen curses TUI. |
 | `--no-tui`, `--cli` | Run line-by-line CLI wizard instead of curses TUI. |
+
+---
+
+## 🤖 AI Agent Integration & MCP Support
+
+MLX-Commander is designed from the ground up for the AI agent era (Antigravity, Claude Desktop, Cursor, Zed, Cline). 
+
+Rather than having an agent interrogate users with 10 questions in chat, agents can **inspect schemas, pre-populate MLX-Commander with recommended mappings and splits, and launch the TUI for tactile confirmation with live preview**.
+
+### 1. Model Context Protocol (MCP) Server
+
+Connect MLX-Commander directly to **Claude Desktop**, **Cursor**, or any MCP-compatible agent:
+
+```json
+{
+  "mcpServers": {
+    "mlx-commander": {
+      "command": "uvx",
+      "args": ["mlx-commander", "--mcp"]
+    }
+  }
+}
+```
+
+Exposed MCP Tools:
+- `inspect_dataset`: Return column names, row counts, detected formats, and sample records.
+- `launch_conversion_tui`: Pre-populate settings and pop up the TUI in macOS Terminal.app for user review. Returns the conversion manifest.
+- `convert_dataset_headless`: Perform direct conversion in the background.
+
+### 2. Pre-Populated TUI Handoff
+Agents can pass pre-computed configuration directly:
+```bash
+mlx-commander --tui --spawn-terminal \
+  --dataset dataset.parquet \
+  --format chat \
+  --messages-col conversations \
+  --train 85 --valid 15 \
+  --manifest-file ./mlx_dataset/mlx_manifest.json
+```
+The command spawns a native macOS Terminal window, displays the live JSONL preview immediately, and returns exit code `0` on conversion or `130` on cancellation.
+
+### 3. Agent Skill Specification
+A ready-to-use Antigravity / Agent Skill definition is included at [`.agents/skills/mlx-dataset-prep/SKILL.md`](.agents/skills/mlx-dataset-prep/SKILL.md) and [`skills/mlx-dataset-prep/SKILL.md`](skills/mlx-dataset-prep/SKILL.md).
 
 ---
 
