@@ -15,6 +15,7 @@ Layout:
 import curses
 import json
 import os
+import textwrap
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -115,6 +116,7 @@ def execute_conversion(stdscr: curses.window, state: CommanderState) -> Optional
 def run_commander_tui(
     stdscr: curses.window,
     default_dataset_path: Optional[str] = None,
+    initial_state: Optional[CommanderState] = None,
 ) -> Optional[ConversionResult]:
     """Main event loop for the persistent MLX-Commander dashboard."""
     configure_escdelay(25)
@@ -122,8 +124,8 @@ def run_commander_tui(
     curses.curs_set(0)
     stdscr.keypad(True)
 
-    state = CommanderState()
-    initial_path = default_dataset_path or os.getcwd()
+    state = initial_state if initial_state is not None else CommanderState()
+    initial_path = default_dataset_path or (state.dataset_path if state.dataset_path else os.getcwd())
 
     # Attempt to auto-load if valid dataset files are in initial directory
     try:
@@ -179,7 +181,13 @@ def run_commander_tui(
         # ----------------------------------------------------
         left_w = max(34, max_x // 2)
         right_w = max_x - left_w
-        panel_h = max(10, max_y - 11)
+
+        # Dynamically size top panel to fit controls cleanly while maximizing preview space
+        mapping_fields = state.get_mapping_fields_for_format()
+        needed_top_h = max(13, 11 + len(mapping_fields))
+        max_possible_top = max(10, max_y - 8)
+        panel_h = min(needed_top_h, max_possible_top)
+
         preview_y = panel_h + 1
         preview_h = max(4, max_y - preview_y - 1)
 
@@ -384,13 +392,66 @@ def run_commander_tui(
         if state.preview_error:
             safe_addstr(stdscr, preview_y + 1, 3, f"⚠️  {state.preview_error}", get_color(5) | curses.A_BOLD)
             safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", curses.A_DIM)
+        elif not state.preview_cache:
+            safe_addstr(stdscr, preview_y + 1, 3, "(No records to preview)", curses.A_DIM)
         else:
-            for i, line in enumerate(state.preview_cache):
-                row = preview_y + 1 + i
-                if row < preview_y + preview_h - 1:
-                    trunc_line = line[:max_x - 10]
-                    safe_addstr(stdscr, row, 3, f"{i + 1}: ", curses.A_BOLD | get_color(2))
-                    safe_addstr(stdscr, row, 6, trunc_line, get_color(4) | curses.A_BOLD)
+            avail_w = max(20, max_x - 10)
+            avail_rows = max(1, preview_h - 2)
+
+            all_wrapped: List[List[str]] = []
+            for line in state.preview_cache:
+                wrapped = textwrap.wrap(
+                    line,
+                    width=avail_w,
+                    break_long_words=True,
+                    break_on_hyphens=False,
+                )
+                all_wrapped.append(wrapped if wrapped else [""])
+
+            # Distribute available rows among all examples so all 3 examples are displayed
+            n_examples = len(all_wrapped)
+            lengths = [len(w) for w in all_wrapped]
+            allocated = [0] * n_examples
+            rem_rows = avail_rows
+
+            # Guarantee at least 1 row per example if rows allow
+            for i in range(n_examples):
+                if rem_rows > 0:
+                    allocated[i] = 1
+                    rem_rows -= 1
+
+            # Distribute remaining rows proportionally to longer examples
+            while rem_rows > 0:
+                candidates = [i for i in range(n_examples) if allocated[i] < lengths[i]]
+                if not candidates:
+                    break
+                for i in candidates:
+                    if rem_rows > 0 and allocated[i] < lengths[i]:
+                        allocated[i] += 1
+                        rem_rows -= 1
+
+            # Render wrapped lines
+            curr_row = preview_y + 1
+            for i, wrapped_lines in enumerate(all_wrapped):
+                num_lines = allocated[i]
+                for line_idx in range(num_lines):
+                    if curr_row >= preview_y + preview_h - 1:
+                        break
+                    line_text = wrapped_lines[line_idx]
+                    # If this is the last line of a truncated example, append ellipsis
+                    if line_idx == num_lines - 1 and num_lines < len(wrapped_lines):
+                        if len(line_text) > avail_w - 5:
+                            line_text = line_text[:avail_w - 5].rstrip() + " ...}"
+                        else:
+                            line_text = line_text + " ...}"
+
+                    if line_idx == 0:
+                        safe_addstr(stdscr, curr_row, 3, f"{i + 1}: ", curses.A_BOLD | get_color(2))
+                        safe_addstr(stdscr, curr_row, 6, line_text, get_color(4) | curses.A_BOLD)
+                    else:
+                        # Continuation line indented
+                        safe_addstr(stdscr, curr_row, 6, line_text, get_color(4))
+                    curr_row += 1
 
         # ----------------------------------------------------
         # 5. Bottom Status / Hotkey Bar

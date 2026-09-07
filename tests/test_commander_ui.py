@@ -165,5 +165,23 @@ class TestCommanderUI(unittest.TestCase):
                 pass
 
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_run_commander_tui_wrapped_preview(self, mock_curs, mock_colors, mock_has_colors):
+        state = CommanderState()
+        long_text = "Word " * 50
+        state.preview_cache = [
+            f'{{"prompt": "{long_text}", "completion": "Answer 1"}}',
+            f'{{"prompt": "Example 2", "completion": "{long_text}"}}',
+            f'{{"prompt": "Example 3", "completion": "Answer 3"}}',
+        ]
+        self.mock_win.getmaxyx.return_value = (35, 90)
+        self.mock_win.getch.side_effect = [ord("q")]
+        res = run_commander_tui(self.mock_win, initial_state=state)
+        self.assertIsNone(res)
+        self.assertTrue(self.mock_win.refresh.called)
+
+
 if __name__ == "__main__":
     unittest.main()
