@@ -175,11 +175,16 @@ def load_from_arrow_file(file_path: Path) -> List[Dict[str, Any]]:
 
 
 def load_from_parquet_file(file_path: Path) -> List[Dict[str, Any]]:
-    """Load records from a Parquet file."""
-    if not HAS_PYARROW:
-        raise RuntimeError("Reading .parquet files requires 'pyarrow' installed.")
-    table = pq.read_table(str(file_path))
-    return table.to_pylist()
+    """Load records from a Parquet file with automatic zero-dependency pure-Python fallback."""
+    if HAS_PYARROW:
+        try:
+            table = pq.read_table(str(file_path))
+            return table.to_pylist()
+        except Exception:
+            pass  # Fallback to pure Python reader
+
+    from mlx_commander.pure_parquet import read_parquet_records
+    return read_parquet_records(file_path)
 
 
 def is_hf_save_to_disk_dir(path: Path) -> bool:

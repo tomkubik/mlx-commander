@@ -322,10 +322,32 @@ class TestCommanderUI(unittest.TestCase):
                     f"Found forbidden emoji character '{ch}' (code {code:X}) in mapping panel output!",
                 )
 
-        # Verify bundled text components exist
-        self.assertTrue(any("Source: prompt" in s for s in printed_strings))
+        # Verify that Target tags exist, but Source tags are removed from the left side
+        self.assertFalse(any("Source: prompt" in s for s in printed_strings))
+        self.assertFalse(any("Source: completion" in s for s in printed_strings))
         self.assertTrue(any("Target: prompt" in s for s in printed_strings))
+        self.assertTrue(any("Target: completion" in s for s in printed_strings))
+        self.assertTrue(any("instruction" in s for s in printed_strings))
+        self.assertTrue(any("output" in s for s in printed_strings))
         self.assertTrue(any("Concat" in s for s in printed_strings))
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_run_commander_tui_multi_file_tip(self, mock_curs, mock_colors, mock_has_colors):
+        printed_strings = []
+
+        def fake_addstr(y, x, s, attr=0):
+            printed_strings.append(s)
+
+        self.mock_win.addstr.side_effect = fake_addstr
+        self.mock_win.getmaxyx.return_value = (30, 100)
+        self.mock_win.getch.side_effect = [ord("q")]
+
+        run_commander_tui(self.mock_win)
+        # Verify multi-file tip is drawn
+        has_tip = any("Tip: You can load multiple files" in s for s in printed_strings)
+        self.assertTrue(has_tip, "Multi-file loading tip was not found in TUI rendered output!")
 
 
 if __name__ == "__main__":

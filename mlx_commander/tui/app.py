@@ -230,6 +230,7 @@ def run_commander_tui(
         edit_focus = is_left and state.left_focus_idx == 1
         draw_button(stdscr, 3, 2, "Finder (F2)", is_focused=f2_focus)
         draw_button(stdscr, 3, 18, "Change Path", is_focused=edit_focus)
+        safe_addstr(stdscr, 4, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], curses.A_DIM)
 
         # Dataset Stats
         if state.loaded_dataset:

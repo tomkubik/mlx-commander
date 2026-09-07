@@ -1039,7 +1039,7 @@ def draw_mapping_pipeline_panel(
     # Top Border of Boxes
     if targets and curr_y < y + h - 1:
         t0 = targets[0]
-        left_top = fmt_border("┌", "┐", f"Source: {t0['key']}", box_w)
+        left_top = fmt_border("┌", "┐", "", box_w)
         right_top = fmt_border("┌", "┐", f"Target: {t0['key']}", box_w)
         safe_addstr(win, curr_y, left_x, left_top, header_box_attr)
         safe_addstr(win, curr_y, right_x, right_top, header_box_attr)
@@ -1137,7 +1137,7 @@ def draw_mapping_pipeline_panel(
         if curr_y < y + h - 1:
             if i < n - 1:
                 next_t = targets[i + 1]
-                left_div = fmt_border("├", "┤", f"Source: {next_t['key']}", box_w)
+                left_div = fmt_border("├", "┤", "", box_w)
                 right_div = fmt_border("├", "┤", f"Target: {next_t['key']}", box_w)
                 safe_addstr(win, curr_y, left_x, left_div, header_box_attr)
                 safe_addstr(win, curr_y, right_x, right_div, header_box_attr)
