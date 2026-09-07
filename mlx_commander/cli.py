@@ -96,7 +96,7 @@ Examples:
         "-d", "--dataset",
         nargs="+",
         type=str,
-        help="Path(s) to local Hugging Face dataset folder or data file(s) (.parquet, .arrow, .jsonl, .csv). Multiple files will be verified for schema consistency and merged.",
+        help="Path(s) to local Hugging Face dataset folder or data file(s) (.parquet, .arrow, .jsonl, .csv, .tsv, .sqlite, .tar). Multiple files will be verified for schema consistency and merged.",
     )
     parser.add_argument(
         "-f", "--format",
@@ -107,7 +107,7 @@ Examples:
     parser.add_argument(
         "-o", "--output",
         type=str,
-        help="Destination directory where train.jsonl, valid.jsonl, test.jsonl will be saved.",
+        help="Destination directory where train.jsonl, valid.jsonl, test.jsonl will be saved (default: 'mlx_dataset' subfolder in same folder as source dataset).",
     )
 
     # Split parameters
@@ -195,11 +195,12 @@ def run_direct_conversion(args: argparse.Namespace) -> ConversionResult:
         if v_errs:
             raise ValueError("Split error: " + "; ".join(v_errs))
 
+    out_dir = args.output or str(dataset.default_output_dir)
     return convert_and_save(
         dataset=dataset,
         format_type=target_format,
         mapping=mapping,
-        output_dir_str=args.output,
+        output_dir=out_dir,
         split_config=split_config,
         use_existing_splits=args.keep_splits,
     )
@@ -227,8 +228,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             dataset_input = args.dataset
 
-    # Case 1: All required CLI flags provided -> Direct Headless Run
-    if args.dataset and args.format and args.output:
+    # Case 1: Direct Headless Run (dataset and format specified, without explicit UI flags)
+    if args.dataset and args.format and not args.wizard and not args.commander:
         try:
             result = run_direct_conversion(args)
             src_desc = f"{len(args.dataset)} files (merged)" if isinstance(args.dataset, list) and len(args.dataset) > 1 else (args.dataset[0] if isinstance(args.dataset, list) else str(args.dataset))

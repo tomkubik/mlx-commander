@@ -562,7 +562,7 @@ def run_interactive_wizard(
                 break
 
     # Step 5: Output Folder & Confirmation
-    default_out = os.path.join(os.getcwd(), "mlx_dataset")
+    default_out = str(dataset.default_output_dir)
     if output_dir_arg:
         dest_dir = output_dir_arg
     else:

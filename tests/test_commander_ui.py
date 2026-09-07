@@ -349,6 +349,49 @@ class TestCommanderUI(unittest.TestCase):
         has_tip = any("Tip: You can load multiple files" in s for s in printed_strings)
         self.assertTrue(has_tip, "Multi-file loading tip was not found in TUI rendered output!")
 
+    def test_commander_state_output_dir_default_and_custom(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from mlx_commander.tui.state import CommanderState
+
+        temp_d = tempfile.mkdtemp()
+        sub_d = Path(temp_d) / "my_hf_data"
+        sub_d.mkdir(parents=True)
+        sample_file = sub_d / "data.jsonl"
+        with open(sample_file, "w") as f:
+            f.write(json.dumps({"prompt": "p", "completion": "c"}) + "\n")
+
+        state = CommanderState()
+        # Loading dataset should set output_dir to <dataset_dir>/mlx_dataset
+        state.load_dataset(str(sample_file))
+        expected_default = str((sub_d / "mlx_dataset").resolve())
+        self.assertEqual(state.output_dir, expected_default)
+        self.assertFalse(state.has_custom_output_dir)
+
+        # Customizing output_dir should be preserved on subsequent loads
+        custom_out = str(Path(temp_d) / "my_custom_mlx")
+        state.output_dir = custom_out
+        state.has_custom_output_dir = True
+
+        state.load_dataset(str(sample_file))
+        self.assertEqual(state.output_dir, custom_out)
+
+    def test_show_output_destination_dialog_esc(self):
+        from mlx_commander.tui.widgets import show_output_destination_dialog
+        self.mock_win.getch.side_effect = [27]  # Esc
+        res = show_output_destination_dialog(self.mock_win, "/tmp/curr", "/tmp/default")
+        self.assertIsNone(res)
+
+    @patch("mlx_commander.gui_picker.is_macos", return_value=False)
+    def test_show_output_destination_dialog_reset(self, mock_is_mac):
+        from mlx_commander.tui.widgets import show_output_destination_dialog
+        # On non-mac: option 0 = Manual, option 1 = Reset to default
+        self.mock_win.getch.side_effect = [curses.KEY_DOWN, 10]
+        res = show_output_destination_dialog(self.mock_win, "/tmp/curr", "/tmp/default")
+        self.assertEqual(res, "/tmp/default")
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -56,6 +56,8 @@ def convert_and_save(
     if target is None:
         target = kwargs.get("output_path")
     if target is None:
+        target = getattr(dataset, "default_output_dir", None)
+    if target is None:
         raise ValueError("output_dir must be specified for convert_and_save")
 
     output_dir = Path(target).expanduser().resolve()

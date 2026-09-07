@@ -64,6 +64,79 @@ class TestCLI(unittest.TestCase):
             lines = [json.loads(l) for l in f]
             self.assertEqual(len(lines), 21)  # 70% of 30 is 21
 
+    def test_cli_tsv_conversion(self):
+        tsv_path = Path(self.temp_dir) / "source.tsv"
+        import csv
+        records = make_sample_qa_records(20)
+        with open(tsv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(records[0].keys()), delimiter="\t")
+            writer.writeheader()
+            for r in records:
+                writer.writerow(r)
+
+        out_dir = Path(self.temp_dir) / "tsv_out"
+        argv = [
+            "-d", str(tsv_path),
+            "-f", "prompt_completion",
+            "-o", str(out_dir),
+            "--prompt-col", "instruction",
+            "--completion-col", "output",
+        ]
+        ret = main(argv)
+        self.assertEqual(ret, 0)
+        self.assertTrue((out_dir / "train.jsonl").exists())
+
+    def test_cli_sqlite_conversion(self):
+        import sqlite3
+        sqlite_path = Path(self.temp_dir) / "source.sqlite"
+        records = make_sample_qa_records(20)
+        conn = sqlite3.connect(str(sqlite_path))
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE records (instruction TEXT, output TEXT);")
+        for r in records:
+            cur.execute("INSERT INTO records VALUES (?, ?)", (r["instruction"], r["output"]))
+        conn.commit()
+        conn.close()
+
+        out_dir = Path(self.temp_dir) / "sqlite_out"
+        argv = [
+            "-d", f"{sqlite_path}::records",
+            "-f", "prompt_completion",
+            "-o", str(out_dir),
+            "--prompt-col", "instruction",
+            "--completion-col", "output",
+        ]
+        ret = main(argv)
+        self.assertEqual(ret, 0)
+        self.assertTrue((out_dir / "train.jsonl").exists())
+
+    def test_cli_webdataset_conversion(self):
+        import io
+        import tarfile
+        tar_path = Path(self.temp_dir) / "source.tar"
+        with tarfile.open(tar_path, "w") as tar:
+            for i in range(10):
+                p_bytes = f"Prompt #{i}".encode("utf-8")
+                c_bytes = f"Answer #{i}".encode("utf-8")
+                ti_p = tarfile.TarInfo(f"{i:03d}.prompt.txt")
+                ti_p.size = len(p_bytes)
+                tar.addfile(ti_p, io.BytesIO(p_bytes))
+                ti_c = tarfile.TarInfo(f"{i:03d}.completion.txt")
+                ti_c.size = len(c_bytes)
+                tar.addfile(ti_c, io.BytesIO(c_bytes))
+
+        out_dir = Path(self.temp_dir) / "wds_out"
+        argv = [
+            "-d", str(tar_path),
+            "-f", "prompt_completion",
+            "-o", str(out_dir),
+            "--prompt-col", "prompt",
+            "--completion-col", "completion",
+        ]
+        ret = main(argv)
+        self.assertEqual(ret, 0)
+        self.assertTrue((out_dir / "train.jsonl").exists())
+
     def test_interactive_wizard(self):
         import io
         import sys
@@ -116,7 +189,37 @@ class TestCLI(unittest.TestCase):
                 # Ensure the interactive wizard is NEVER called as a fallback
                 mock_wizard.assert_not_called()
 
+    def test_cli_direct_conversion_default_output_folder(self):
+        # When -o is omitted, direct conversion defaults to saving in <src_dir>/mlx_dataset
+        argv = [
+            "-d", str(self.src_file),
+            "-f", "prompt_completion",
+            "--prompt-col", "instruction",
+            "--completion-col", "output",
+        ]
+        ret = main(argv)
+        self.assertEqual(ret, 0)
+
+        expected_dir = self.src_file.parent / "mlx_dataset"
+        self.assertTrue((expected_dir / "train.jsonl").exists())
+        self.assertTrue((expected_dir / "valid.jsonl").exists())
+        self.assertTrue((expected_dir / "test.jsonl").exists())
+
+    def test_cli_direct_conversion_custom_output_folder(self):
+        custom_dir = Path(self.temp_dir) / "custom_destination"
+        argv = [
+            "-d", str(self.src_file),
+            "-f", "prompt_completion",
+            "-o", str(custom_dir),
+            "--prompt-col", "instruction",
+            "--completion-col", "output",
+        ]
+        ret = main(argv)
+        self.assertEqual(ret, 0)
+        self.assertTrue((custom_dir / "train.jsonl").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

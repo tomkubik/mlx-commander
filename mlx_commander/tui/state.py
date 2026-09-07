@@ -43,7 +43,8 @@ class CommanderState:
     valid_pct: float = 10.0
     test_pct: float = 10.0
     seed: int = field(default_factory=generate_random_seed)
-    output_dir: str = "./mlx_dataset"
+    output_dir: str = ""
+    has_custom_output_dir: bool = False
 
     # UI navigation state
     active_panel: ActivePanel = ActivePanel.LEFT
@@ -59,6 +60,22 @@ class CommanderState:
     # Reactive preview cache
     preview_cache: List[str] = field(default_factory=list)
     preview_error: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.output_dir:
+            self.has_custom_output_dir = True
+        else:
+            if self.loaded_dataset:
+                self.output_dir = str(self.loaded_dataset.default_output_dir)
+            elif self.dataset_path:
+                try:
+                    p = Path(self.dataset_path.split("::")[0]).resolve()
+                    base = p if p.is_dir() else p.parent
+                    self.output_dir = str(base / "mlx_dataset")
+                except Exception:
+                    self.output_dir = str(Path.cwd() / "mlx_dataset")
+            else:
+                self.output_dir = str(Path.cwd() / "mlx_dataset")
 
     def load_dataset(self, path_input: Any) -> bool:
         """Load dataset from disk (single file/folder or multiple merged files) and update state."""
@@ -78,6 +95,8 @@ class CommanderState:
 
             # Auto-detect column mapping for current format
             self.mapping = auto_detect_mapping(self.target_format, ds.columns)
+            if not self.has_custom_output_dir:
+                self.output_dir = str(ds.default_output_dir)
             if "Merged (" in ds.source_path:
                 self.status_message = f"[OK] {ds.source_path}: {ds.total_rows:,} records merged. Schemas verified."
             else:

@@ -49,6 +49,7 @@ from mlx_commander.tui.widgets import (
     show_error_dialog,
     show_help_dialog,
     show_message_dialog,
+    show_output_destination_dialog,
     show_results_dialog,
     show_text_edit_dialog,
 )
@@ -139,14 +140,30 @@ def run_commander_tui(
             or any(p.glob("*.parquet"))
             or any(p.glob("*.jsonl"))
             or any(p.glob("*.arrow"))
+            or any(p.glob("*.csv"))
+            or any(p.glob("*.tsv"))
+            or any(p.glob("*.sqlite"))
+            or any(p.glob("*.db"))
+            or any(p.glob("*.tar"))
+            or any(p.glob("*.tar.gz"))
             or any(p.glob("dataset_info.json"))
         )
         if has_dataset:
             state.load_dataset(str(p))
         else:
             state.dataset_path = str(p)
+            if not state.has_custom_output_dir:
+                base = p if p.is_dir() else p.parent
+                state.output_dir = str(base / "mlx_dataset")
     except Exception:
         state.dataset_path = initial_path
+        if not state.has_custom_output_dir:
+            try:
+                p = Path(initial_path).resolve()
+                base = p if p.is_dir() else p.parent
+                state.output_dir = str(base / "mlx_dataset")
+            except Exception:
+                state.output_dir = str(Path.cwd() / "mlx_dataset")
 
     conversion_result: Optional[ConversionResult] = None
     formats_list = [
@@ -177,7 +194,7 @@ def run_commander_tui(
         hdr_attr = (get_color(1) | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
         safe_addstr(stdscr, 0, 0, " " * max_x, hdr_attr)
         safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
-        hint_str = "[F1: Help | F10: Exit]"
+        hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F10: Exit]" if max_x >= 88 else "[F1: Help | F10: Exit]"
         safe_addstr(stdscr, 0, max(2, max_x - len(hint_str) - 2), hint_str, hdr_attr)
 
         # ----------------------------------------------------
@@ -223,29 +240,30 @@ def run_commander_tui(
         max_path_w = left_w - 10
         if len(disp_path) > max_path_w:
             disp_path = "…" + disp_path[-(max_path_w - 1):]
-        safe_addstr(stdscr, 2, 2, f"Path: {disp_path}", curses.A_DIM)
+        safe_addstr(stdscr, 2, 2, "Path: ", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 2, 8, disp_path[:max_path_w], (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
         # Action Buttons
         f2_focus = is_left and state.left_focus_idx == 0
         edit_focus = is_left and state.left_focus_idx == 1
         draw_button(stdscr, 3, 2, "Finder (F2)", is_focused=f2_focus)
         draw_button(stdscr, 3, 18, "Change Path", is_focused=edit_focus)
-        safe_addstr(stdscr, 4, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], curses.A_DIM)
+        safe_addstr(stdscr, 4, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
         # Dataset Stats
         if state.loaded_dataset:
             ds = state.loaded_dataset
-            safe_addstr(stdscr, 5, 2, f"Rows: {ds.total_rows:,}  |  Splits: {len(ds.split_names)}", curses.A_BOLD)
+            safe_addstr(stdscr, 5, 2, f"Rows: {ds.total_rows:,}  |  Splits: {len(ds.split_names)}", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
             split_summary = ", ".join(f"{s}: {ds.split_counts.get(s, 0):,}" for s in ds.split_names[:3])
-            safe_addstr(stdscr, 6, 2, f"Found: [{split_summary}]", curses.A_DIM)
+            safe_addstr(stdscr, 6, 2, f"Found: [{split_summary}]", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
             cols = ds.columns
         else:
-            safe_addstr(stdscr, 5, 2, "No dataset loaded.", get_color(6) | curses.A_BOLD)
-            safe_addstr(stdscr, 6, 2, "Click Finder (F2) or Change Path.", curses.A_DIM)
+            safe_addstr(stdscr, 5, 2, "No dataset loaded.", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, 6, 2, "Click Finder (F2) or Change Path.", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
             cols = []
 
         # Available Columns List
-        safe_addstr(stdscr, 7, 2, f"Columns ({len(cols)}):", curses.A_BOLD)
+        safe_addstr(stdscr, 7, 2, f"Columns ({len(cols)}):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         col_list_focus = is_left and state.left_focus_idx == 2
         col_list_start_y = 8
         col_list_rows = max(1, panel_h - 11)
@@ -265,7 +283,12 @@ def run_commander_tui(
                     is_col_sel = col_list_focus and (c_idx == state.selected_column_idx)
                     prefix = " ▶ " if is_col_sel else "   "
                     text = f"{prefix}{c_idx + 1}. {c_name}"[:left_w - 4]
-                    c_attr = (get_color(3) | curses.A_STANDOUT | curses.A_BOLD) if is_col_sel else (get_color(4) if col_list_focus else curses.A_DIM)
+                    if is_col_sel:
+                        c_attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
+                    elif col_list_focus:
+                        c_attr = (get_color(2) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+                    else:
+                        c_attr = get_color(2) if curses.has_colors() else 0
                     safe_addstr(stdscr, row_y, 2, text, c_attr)
 
             # Sample value preview for currently highlighted column
@@ -274,9 +297,10 @@ def run_commander_tui(
                 sample_val = str(state.loaded_dataset.sample_records[0].get(col_name, ""))
                 if len(sample_val) > left_w - 12:
                     sample_val = sample_val[:left_w - 13] + "…"
-                safe_addstr(stdscr, panel_h - 1, 2, f"Sample: {sample_val}", get_color(2) | curses.A_DIM)
+                safe_addstr(stdscr, panel_h - 1, 2, "Sample: ", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+                safe_addstr(stdscr, panel_h - 1, 10, sample_val, (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
         else:
-            safe_addstr(stdscr, col_list_start_y, 4, "(Load dataset to view schema)", curses.A_DIM)
+            safe_addstr(stdscr, col_list_start_y, 4, "(Load dataset to view schema)", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
         # ----------------------------------------------------
         # 3. Right Panel: MLX Format, Mappings & Splits
@@ -297,7 +321,7 @@ def run_commander_tui(
 
         # Field 0: Target Format Radios
         fmt_focus = is_right and state.right_focus_idx == 0
-        safe_addstr(stdscr, 2, left_w + 2, "Format:", curses.A_BOLD | (get_color(2) if fmt_focus else 0))
+        safe_addstr(stdscr, 2, left_w + 2, "Format:", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         draw_radio(
             stdscr,
             2,
@@ -332,7 +356,7 @@ def run_commander_tui(
         )
 
         # Fields 1..N: Column Mappings
-        safe_addstr(stdscr, 4, left_w + 2, "Column Mappings [Press Enter to Pick]:", curses.A_DIM)
+        safe_addstr(stdscr, 4, left_w + 2, "Column Mappings [Press Enter to Pick]:", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         for idx, f_info in enumerate(mapping_fields):
             row_y = 5 + idx
             is_f_focused = is_right and (state.right_focus_idx == 1 + idx)
@@ -355,7 +379,7 @@ def run_commander_tui(
         valid_focus = is_right and state.right_focus_idx == 2 + len(mapping_fields)
         test_focus = is_right and state.right_focus_idx == 3 + len(mapping_fields)
 
-        safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", curses.A_BOLD)
+        safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         draw_field(stdscr, splits_start_y, left_w + 14, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=8)
         draw_field(stdscr, splits_start_y, left_w + 28, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=8)
         draw_field(stdscr, splits_start_y, left_w + 42, "Test", f"{state.test_pct:.0f}%", is_focused=test_focus, val_width=8)
@@ -366,7 +390,7 @@ def run_commander_tui(
                 splits_start_y + 1,
                 left_w + 4,
                 f"Records: {split_counts['train']:,} train / {split_counts['valid']:,} valid / {split_counts['test']:,} test",
-                curses.A_DIM,
+                (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM,
             )
 
         # Seed & Randomize
@@ -414,9 +438,9 @@ def run_commander_tui(
 
         if state.preview_error:
             safe_addstr(stdscr, preview_y + 1, 3, f"[!] {state.preview_error}", get_color(5) | curses.A_BOLD)
-            safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", curses.A_DIM)
+            safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
         elif not state.preview_cache:
-            safe_addstr(stdscr, preview_y + 1, 3, "(No records to preview)", curses.A_DIM)
+            safe_addstr(stdscr, preview_y + 1, 3, "(No records to preview)", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
         else:
             avail_w = max(20, max_x - 10)
             avail_rows = max(1, preview_h - 2)
@@ -469,11 +493,11 @@ def run_commander_tui(
                             line_text = line_text + " ...}"
 
                     if line_idx == 0:
-                        safe_addstr(stdscr, curr_row, 3, f"{i + 1}: ", curses.A_BOLD | get_color(2))
-                        safe_addstr(stdscr, curr_row, 6, line_text, get_color(4) | curses.A_BOLD)
+                        safe_addstr(stdscr, curr_row, 3, f"{i + 1}: ", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+                        safe_addstr(stdscr, curr_row, 6, line_text, (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
                     else:
                         # Continuation line indented
-                        safe_addstr(stdscr, curr_row, 6, line_text, get_color(4))
+                        safe_addstr(stdscr, curr_row, 6, line_text, get_color(4) if curses.has_colors() else 0)
                     curr_row += 1
 
         # ----------------------------------------------------
@@ -482,7 +506,7 @@ def run_commander_tui(
         footer_y = max_y - 1
         safe_addstr(stdscr, footer_y, 0, " " * max_x, hdr_attr)
 
-        bar_shortcuts = "[Tab] Switch  [↑/↓] Move  [Enter] Edit  [F2] Finder  [F5] Convert"
+        bar_shortcuts = "[Tab] Switch  [↑/↓] Move  [Enter] Edit  [F2] Open  [F3] Output  [F5] Convert" if max_x >= 92 else "[Tab] Switch  [F2] Open  [F5] Convert"
         shortcuts_x = max(10, max_x - len(bar_shortcuts) - 2)
         avail_status = max(10, shortcuts_x - 4)
 
@@ -519,6 +543,37 @@ def run_commander_tui(
                 if chosen:
                     if not state.load_dataset(chosen):
                         show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
+
+            elif key in (curses.KEY_F3,):  # F3: Destination Folder
+                curses.def_prog_mode()
+                curses.endwin()
+                from mlx_commander.gui_picker import is_macos, pick_folder_gui
+                if is_macos():
+                    start_dir = state.output_dir or (str(state.loaded_dataset.default_output_dir) if state.loaded_dataset else os.getcwd())
+                    chosen = pick_folder_gui("Select Destination Folder", default_dir=start_dir)
+                else:
+                    chosen = None
+                curses.reset_prog_mode()
+                stdscr.refresh()
+                if chosen:
+                    state.output_dir = chosen.strip()
+                    default_out = str(state.loaded_dataset.default_output_dir) if state.loaded_dataset else ""
+                    state.has_custom_output_dir = (state.output_dir != default_out)
+                    state.status_message = f"Output folder set to: {state.output_dir}"
+                    state.status_is_error = False
+                elif not is_macos():
+                    default_out = str(state.loaded_dataset.default_output_dir) if state.loaded_dataset else state.output_dir
+                    val = show_text_edit_dialog(
+                        stdscr,
+                        "Output Directory",
+                        "Enter folder to save MLX JSONL datasets:",
+                        default_val=state.output_dir or default_out,
+                    )
+                    if val:
+                        state.output_dir = val.strip()
+                        state.has_custom_output_dir = (state.output_dir != default_out)
+                        state.status_message = f"Output folder set to: {state.output_dir}"
+                        state.status_is_error = False
 
             elif key == curses.KEY_F5:
                 res = execute_conversion(stdscr, state)
@@ -639,9 +694,17 @@ def run_commander_tui(
                         state.randomize_seed()
 
                     elif idx == 6 + len(mapping_fields):  # Output Dir
-                        val = show_text_edit_dialog(stdscr, "Output Directory", "Enter folder to save MLX JSONL datasets:", state.output_dir)
-                        if val:
-                            state.output_dir = val.strip()
+                        default_out = str(state.loaded_dataset.default_output_dir) if state.loaded_dataset else state.output_dir
+                        chosen = show_output_destination_dialog(
+                            stdscr,
+                            current_output=state.output_dir,
+                            default_output=default_out,
+                        )
+                        if chosen is not None:
+                            state.output_dir = chosen.strip()
+                            state.has_custom_output_dir = (state.output_dir != default_out)
+                            state.status_message = f"Output folder set to: {state.output_dir}"
+                            state.status_is_error = False
 
                     elif idx == 7 + len(mapping_fields):  # Convert button
                         res = execute_conversion(stdscr, state)

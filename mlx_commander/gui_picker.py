@@ -99,7 +99,7 @@ def run_runtime_compiled_picker(mode: str = "both", default_dir: Optional[str] =
 def pick_dataset_gui(default_dir: Optional[str] = None, prompt: str = "Select Dataset (File, Files, or Folder)") -> Optional[str]:
     """
     Unified GUI dataset picker.
-    Allows selecting a folder OR one or more dataset files (.parquet, .jsonl, .arrow, .csv).
+    Allows selecting a folder OR one or more dataset files (.parquet, .jsonl, .arrow, .csv, .tsv, .sqlite, .tar).
     Compiled dynamically at runtime.
     """
     if is_macos():

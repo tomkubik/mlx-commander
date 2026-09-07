@@ -321,7 +321,7 @@ def show_error_dialog(
             safe_addstr(stdscr, start_y + 2 + idx, start_x + 3, wrapped_lines[idx][:inner_w], text_attr)
 
         hint = "[Enter] OK   [Esc] Dismiss"
-        safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, curses.A_STANDOUT)
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT)
 
         stdscr.refresh()
 
@@ -362,7 +362,7 @@ def show_message_dialog(
     start_x = max(1, (max_x - w) // 2)
 
     border_attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
-    title_attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    title_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     text_attr = get_color(4) if safe_has_colors() else 0
 
     while True:
@@ -379,7 +379,7 @@ def show_message_dialog(
             safe_addstr(stdscr, start_y + 2 + idx, start_x + 3, wrapped_lines[idx][:inner_w], text_attr)
 
         hint = "[Enter] OK   [Esc] Dismiss"
-        safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, curses.A_STANDOUT)
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT)
 
         stdscr.refresh()
 
@@ -398,23 +398,26 @@ def draw_box_panel(
     is_focused: bool = False,
     subtitle: str = "",
 ) -> None:
-    """Draw a styled box panel with title and active focus indicator."""
+    """Draw a styled box panel with white title and teal/dim active focus border."""
     if h <= 2 or w <= 4:
         return
 
     border_attr = (get_color(2) | curses.A_BOLD) if (is_focused and safe_has_colors()) else (curses.A_DIM)
-    title_attr = (get_color(2) | curses.A_BOLD) if (is_focused and safe_has_colors()) else (curses.A_BOLD)
+    title_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
 
-    prefix = f"┌─ {title} "
+    safe_addstr(win, y, x, "┌─ ", border_attr)
+    title_text = f"{title} "
+    safe_addstr(win, y, x + 3, title_text, title_attr)
+    curr_x = x + 3 + len(title_text)
     if subtitle:
-        prefix += f"[{subtitle}] "
-    avail_line = w - len(prefix) - 1
+        sub_text = f"[{subtitle}] "
+        safe_addstr(win, y, curr_x, sub_text, (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        curr_x += len(sub_text)
+    avail_line = max(0, (x + w - 1) - curr_x)
     if avail_line > 0:
-        top_str = prefix + "─" * avail_line + "┐"
+        safe_addstr(win, y, curr_x, "─" * avail_line + "┐", border_attr)
     else:
-        top_str = "┌" + "─" * (w - 2) + "┐"
-
-    safe_addstr(win, y, x, top_str, border_attr)
+        safe_addstr(win, y, x + w - 1, "┐", border_attr)
 
     for row in range(y + 1, y + h - 1):
         safe_addstr(win, row, x, "│", border_attr)
@@ -424,12 +427,12 @@ def draw_box_panel(
 
 
 def draw_button(win: curses.window, y: int, x: int, label: str, is_focused: bool = False) -> None:
-    """Draw an interactive button."""
+    """Draw an interactive button in teal (active input element)."""
     btn_str = f"[ {label} ]"
     if is_focused:
-        attr = (get_color(3) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+        attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     else:
-        attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     safe_addstr(win, y, x, btn_str, attr)
 
 
@@ -441,15 +444,15 @@ def draw_radio(
     is_checked: bool = False,
     is_focused: bool = False,
 ) -> None:
-    """Draw an interactive radio button option."""
+    """Draw an interactive radio button option in teal (active selection element)."""
     mark = "●" if is_checked else " "
     radio_str = f"({mark}) {label}"
     if is_focused:
         attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     elif is_checked:
-        attr = (get_color(3) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     else:
-        attr = curses.A_DIM
+        attr = get_color(2) if safe_has_colors() else 0
     safe_addstr(win, y, x, radio_str, attr)
 
 
@@ -463,9 +466,10 @@ def draw_field(
     val_width: int = 24,
     has_dropdown: bool = False,
 ) -> None:
-    """Draw a labeled form field with highlighted active box."""
+    """Draw a labeled form field with white inactive label and teal active input box."""
     lbl = f"{label}: "
-    safe_addstr(win, y, x, lbl, curses.A_BOLD)
+    lbl_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    safe_addstr(win, y, x, lbl, lbl_attr)
     val_x = x + len(lbl)
 
     disp_val = val_str or "<none>"
@@ -541,7 +545,7 @@ def show_column_picker_dialog(
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(2) | curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, f" {title} ", get_color(2) | curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, f" {title} ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
 
         visible_rows = h - 5
         if sel_idx < scroll_offset:
@@ -571,25 +575,26 @@ def show_column_picker_dialog(
 
                 line_text = f"{prefix}{box} {opt_name}"[: w - 4]
                 if is_focused:
-                    attr = (get_color(3) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+                    attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
                 elif opt_name in selected_cols:
-                    attr = (get_color(3) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+                    attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
                 else:
-                    attr = 0
+                    attr = get_color(2) if safe_has_colors() else 0
 
                 safe_addstr(stdscr, row_y, start_x + 1, line_text, attr)
 
         # Concatenation selection summary
         safe_addstr(stdscr, start_y + h - 3, start_x, "║" + " " * (w - 2) + "║", get_color(2))
+        safe_addstr(stdscr, start_y + h - 3, start_x + 2, "Selection: ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         if selected_cols:
-            summary_txt = "Selection: " + " + ".join(selected_cols)
-            safe_addstr(stdscr, start_y + h - 3, start_x + 2, summary_txt[: w - 4], get_color(3) | curses.A_BOLD)
+            summary_txt = " + ".join(selected_cols)
+            safe_addstr(stdscr, start_y + h - 3, start_x + 13, summary_txt[: w - 15], (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         else:
-            safe_addstr(stdscr, start_y + h - 3, start_x + 2, "Selection: <none>", curses.A_DIM)
+            safe_addstr(stdscr, start_y + h - 3, start_x + 13, "<none>", (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
 
         # Footer
         safe_addstr(stdscr, start_y + h - 2, start_x, "║" + " " * (w - 2) + "║", get_color(2))
-        safe_addstr(stdscr, start_y + h - 2, start_x + 2, "[Space] Toggle/Order  [Enter] OK  [Esc] Cancel"[: w - 4], curses.A_DIM)
+        safe_addstr(stdscr, start_y + h - 2, start_x + 2, "[Space] Toggle/Order  [Enter] OK  [Esc] Cancel"[: w - 4], (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(2) | curses.A_BOLD)
         stdscr.refresh()
 
@@ -651,18 +656,18 @@ def show_text_edit_dialog(
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(2) | curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, f" {title} ", get_color(2) | curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, f" {title} ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         for r in range(1, h - 1):
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(2))
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(2) | curses.A_BOLD)
 
-        safe_addstr(stdscr, start_y + 1, start_x + 2, prompt, curses.A_BOLD)
+        safe_addstr(stdscr, start_y + 1, start_x + 2, prompt, (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
 
         val_str = "".join(text_chars)
         box_w = w - 6
         disp = val_str[-(box_w):] if len(val_str) > box_w else val_str
-        safe_addstr(stdscr, start_y + 3, start_x + 3, disp + " " * (box_w - len(disp)), get_color(2) | curses.A_STANDOUT)
-        safe_addstr(stdscr, start_y + 5, start_x + 2, "[Enter] OK   [Esc] Cancel", curses.A_DIM)
+        safe_addstr(stdscr, start_y + 3, start_x + 3, disp + " " * (box_w - len(disp)), (get_color(2) | curses.A_STANDOUT) if safe_has_colors() else curses.A_STANDOUT)
+        safe_addstr(stdscr, start_y + 5, start_x + 2, "[Enter] OK   [Esc] Cancel", (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
 
         cursor_x = start_x + 3 + min(cursor_pos, box_w)
         stdscr.move(start_y + 3, cursor_x)
@@ -694,6 +699,102 @@ def show_text_edit_dialog(
             cursor_pos += 1
 
 
+def show_output_destination_dialog(
+    stdscr: curses.window,
+    current_output: str,
+    default_output: str,
+) -> Optional[str]:
+    """
+    Dialog allowing user to choose how to specify the destination output folder:
+      1) Open macOS Finder (GUI Folder Picker) [if macOS]
+      2) Enter folder path manually
+      3) Reset to default (<dataset_dir>/mlx_dataset)
+    Returns:
+      Selected path string, or None if cancelled with Esc.
+    """
+    from mlx_commander.gui_picker import is_macos, pick_folder_gui
+
+    options: List[Tuple[str, str]] = []
+    if is_macos():
+        options.append(("Finder (GUI Folder Picker)", "Open native macOS Finder to select destination folder"))
+    options.append(("Manual Path Entry", "Type or paste custom destination directory path"))
+    options.append(("Reset to Default", f"Use default: {default_output}"))
+
+    sel_idx = 0
+    max_y, max_x = stdscr.getmaxyx()
+    h = min(12, max_y - 4)
+    w = min(74, max_x - 4)
+    start_y = max(1, (max_y - h) // 2)
+    start_x = max(1, (max_x - w) // 2)
+
+    safe_curs_set(0)
+
+    while True:
+        safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " Destination Output Folder ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(2) if safe_has_colors() else 0)
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+
+        # Summary of current and default paths
+        curr_disp = current_output or "<none>"
+        if len(curr_disp) > w - 16:
+            curr_disp = "…" + curr_disp[-(w - 17):]
+        def_disp = default_output or "<none>"
+        if len(def_disp) > w - 16:
+            def_disp = "…" + def_disp[-(w - 17):]
+
+        safe_addstr(stdscr, start_y + 1, start_x + 3, "Current: ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y + 1, start_x + 12, curr_disp, (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y + 2, start_x + 3, "Default: ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y + 2, start_x + 12, def_disp, (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+
+        safe_addstr(stdscr, start_y + 3, start_x + 2, "╟" + "─" * (w - 4) + "╢", (get_color(2) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+
+        # Draw option rows
+        for i, (label, desc) in enumerate(options):
+            row_y = start_y + 4 + i
+            is_focused = (i == sel_idx)
+            prefix = " ▶ " if is_focused else "   "
+            line_str = f"{prefix}{label:<28} {desc}"[: w - 6]
+            if is_focused:
+                attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+            else:
+                attr = get_color(2) if safe_has_colors() else 0
+            safe_addstr(stdscr, row_y, start_x + 2, line_str, attr)
+
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "[Enter/Space] Select   [Esc] Cancel", (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        stdscr.refresh()
+
+        k = stdscr.getch()
+        if k in (curses.KEY_UP, ord("k")):
+            sel_idx = (sel_idx - 1) % len(options)
+        elif k in (curses.KEY_DOWN, ord("j")):
+            sel_idx = (sel_idx + 1) % len(options)
+        elif k in (27, ord("q"), ord("Q")):
+            return None
+        elif k in (10, 13, 32):  # Enter or Space
+            chosen_label = options[sel_idx][0]
+            if "Finder" in chosen_label:
+                curses.def_prog_mode()
+                curses.endwin()
+                start_dir = current_output or default_output or os.getcwd()
+                res = pick_folder_gui("Select Destination Folder", default_dir=start_dir)
+                curses.reset_prog_mode()
+                stdscr.refresh()
+                return res if res else None
+            elif "Manual" in chosen_label:
+                val = show_text_edit_dialog(
+                    stdscr,
+                    "Output Directory",
+                    "Enter folder to save MLX JSONL datasets:",
+                    default_val=current_output or default_output,
+                )
+                return val.strip() if val else None
+            elif "Reset" in chosen_label:
+                return default_output
+
+
 def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
     """Modal dialog displaying conversion results and mlx_lm.lora command."""
     if not hasattr(result, "output_dir") or result is False:
@@ -703,29 +804,30 @@ def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
 
     configure_escdelay(25)
     safe_curs_set(0)
+
     max_y, max_x = stdscr.getmaxyx()
-    h = min(max_y - 4, 20)
-    w = min(max_x - 6, 80)
+    h = min(17, max_y - 2)
+    w = min(74, max_x - 4)
     start_y = max(1, (max_y - h) // 2)
     start_x = max(1, (max_x - w) // 2)
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(3) | curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, " [OK] Conversion Successful! ", get_color(3) | curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " [OK] Conversion Successful! ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         for r in range(1, h - 1):
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(3))
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(3) | curses.A_BOLD)
 
-        safe_addstr(stdscr, start_y + 2, start_x + 3, f"Saved dataset to: {result.output_dir}", curses.A_BOLD)
+        safe_addstr(stdscr, start_y + 2, start_x + 3, f"Saved dataset to: {result.output_dir}", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         row = start_y + 4
         for split_name, file_path in result.output_files.items():
             cnt = result.record_counts.get(split_name, 0)
             sz = result.file_sizes.get(split_name, 0) / 1024.0
-            safe_addstr(stdscr, row, start_x + 3, f"• {file_path.name}: {cnt:,} records ({sz:.1f} KB)", curses.A_DIM)
+            safe_addstr(stdscr, row, start_x + 3, f"• {file_path.name}: {cnt:,} records ({sz:.1f} KB)", (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
             row += 1
 
         row += 1
-        safe_addstr(stdscr, row, start_x + 3, "MLX Fine-tuning Command:", get_color(2) | curses.A_BOLD)
+        safe_addstr(stdscr, row, start_x + 3, "MLX Fine-tuning Command:", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         row += 1
         cmd_lines = result.generate_mlx_lora_command().strip().split("\n")
         for line in cmd_lines[:6]:
@@ -733,7 +835,7 @@ def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
                 safe_addstr(stdscr, row, start_x + 5, line[: w - 8], get_color(2))
                 row += 1
 
-        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "Press [Enter], [Space], or [Esc] to return", curses.A_STANDOUT)
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "Press [Enter], [Space], or [Esc] to return", (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT)
         stdscr.refresh()
 
         k = stdscr.getch()
@@ -742,12 +844,10 @@ def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
 
 
 def show_help_dialog(stdscr: curses.window) -> None:
-    """Modal dialog displaying MLX-Commander shortcut help."""
-    configure_escdelay(25)
-    safe_curs_set(0)
+    """Modal dialog displaying all keyboard shortcuts."""
     max_y, max_x = stdscr.getmaxyx()
-    h = min(max_y - 4, 18)
-    w = min(max_x - 6, 76)
+    h = min(17, max_y - 2)
+    w = min(72, max_x - 4)
     start_y = max(1, (max_y - h) // 2)
     start_x = max(1, (max_x - w) // 2)
 
@@ -757,6 +857,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
         ("← / → (or h / l)", "Toggle MLX format radio options"),
         ("Enter / Space", "Open column dropdown, edit field value, or trigger button"),
         ("F2", "Open native macOS Finder upload / dataset picker"),
+        ("F3", "Open macOS Finder to choose output destination folder"),
         ("F5", "Run conversion and write train/valid/test JSONL files"),
         ("r / R", "Randomize split seed"),
         ("? / F1", "Show this help screen"),
@@ -765,7 +866,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(2) | curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, " MLX-Commander Keyboard Shortcuts ", get_color(2) | curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " MLX-Commander Keyboard Shortcuts ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         for r in range(1, h - 1):
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(2))
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(2) | curses.A_BOLD)
@@ -773,10 +874,10 @@ def show_help_dialog(stdscr: curses.window) -> None:
         for i, (key, desc) in enumerate(shortcuts):
             row = start_y + 2 + i
             if row < start_y + h - 2:
-                safe_addstr(stdscr, row, start_x + 3, f"{key:<20}", get_color(3) | curses.A_BOLD)
-                safe_addstr(stdscr, row, start_x + 24, desc[: w - 27], curses.A_DIM)
+                safe_addstr(stdscr, row, start_x + 3, f"{key:<20}", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+                safe_addstr(stdscr, row, start_x + 24, desc[: w - 27], (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
 
-        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "Press [Enter], [Space], or [Esc] to close", curses.A_STANDOUT)
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "Press [Enter], [Space], or [Esc] to close", (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT)
         stdscr.refresh()
 
         k = stdscr.getch()
@@ -1004,7 +1105,7 @@ def draw_mapping_pipeline_panel(
     flow_w = right_x - flow_x
 
     header_y = y + 1
-    safe_addstr(win, header_y, left_x + 1, "ORIGINAL COLUMNS (BUNDLED)", curses.A_BOLD | get_color(4))
+    safe_addstr(win, header_y, left_x + 1, "ORIGINAL COLUMNS", curses.A_BOLD | get_color(4))
     flow_title = "FLOW JOINTS"
     safe_addstr(win, header_y, flow_x + max(0, (flow_w - len(flow_title)) // 2), flow_title, curses.A_DIM | get_color(2))
     safe_addstr(win, header_y, right_x + 1, "TARGET MLX SCHEMA", curses.A_BOLD | get_color(4))
