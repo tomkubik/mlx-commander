@@ -3,12 +3,12 @@ MLX-Commander: Persistent Full-Screen Curses TUI Dashboard.
 Dual-panel Norton Commander-style interface with real-time reactive JSONL preview.
 
 Layout:
-┌─ 📂 Dataset & Schema (Left Panel) ─────────┐┌─ ⚙️ MLX Format & Mappings (Right Panel) ─────┐
+┌─ Dataset & Schema (Left Panel) ─────────┐┌─ MLX Format & Mappings (Right Panel) ─────┐
 │ Path, Stats, and Scrollable Column List   ││ Format Radio, Column Dropdowns, Splits     │
-└────────────────────────────────────────────┘└─────────────────────────────────────────────┘
-┌─ 👁️ Live Converted Record Preview (Updates instantaneously as you edit fields) ───────────┐
-│ {"prompt": "...", "completion": "..."}                                                    │
-└───────────────────────────────────────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────┘└────────────────────────────────────────────┘
+┌─ Live Converted Record Preview (Updates instantaneously as you edit fields) ──────────┐
+│ {"prompt": "...", "completion": "..."}                                                │
+└───────────────────────────────────────────────────────────────────────────────────────┘
  [Tab] Switch Pane   [↑/↓] Navigate   [Enter] Edit/Select   [F2] Finder   [F5] Convert   [F10] Exit
 """
 
@@ -41,6 +41,7 @@ from mlx_commander.tui.widgets import (
     draw_field,
     draw_footer,
     draw_header,
+    draw_mapping_pipeline_panel,
     draw_radio,
     get_color,
     safe_addstr,
@@ -103,7 +104,7 @@ def execute_conversion(stdscr: curses.window, state: CommanderState) -> Optional
             split_config=split_cfg,
         )
         show_results_dialog(stdscr, res)
-        state.status_message = f"✔ Conversion complete! Saved to {res.output_dir}"
+        state.status_message = f"[OK] Conversion complete! Saved to {res.output_dir}"
         state.status_is_error = False
         return res
     except Exception as e:
@@ -172,24 +173,30 @@ def run_commander_tui(
         # ----------------------------------------------------
         hdr_attr = (get_color(1) | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
         safe_addstr(stdscr, 0, 0, " " * max_x, hdr_attr)
-        safe_addstr(stdscr, 0, 2, "🚀 MLX-Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
+        safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
         hint_str = "[F1: Help | F10: Exit]"
         safe_addstr(stdscr, 0, max(2, max_x - len(hint_str) - 2), hint_str, hdr_attr)
 
         # ----------------------------------------------------
-        # Dimensions & Coordinates
+        # Dimensions & Coordinates (3-Tier Responsive Layout)
         # ----------------------------------------------------
         left_w = max(34, max_x // 2)
         right_w = max_x - left_w
 
-        # Dynamically size top panel to fit controls cleanly while maximizing preview space
+        # Tier 1: Top configuration panels
         mapping_fields = state.get_mapping_fields_for_format()
-        needed_top_h = max(13, 11 + len(mapping_fields))
-        max_possible_top = max(10, max_y - 8)
+        needed_top_h = max(12, 10 + len(mapping_fields))
+        max_possible_top = max(9, max_y - 12)
         panel_h = min(needed_top_h, max_possible_top)
 
-        preview_y = panel_h + 1
-        preview_h = max(4, max_y - preview_y - 1)
+        # Tier 2: Middle visual mapping pipeline
+        remaining_y = max(8, max_y - 1 - (panel_h + 1))
+        vis_h = max(5, min(10, remaining_y // 2))
+        vis_y = panel_h + 1
+
+        # Tier 3: Bottom live preview panel
+        preview_y = vis_y + vis_h
+        preview_h = max(4, max_y - 1 - preview_y)
 
         is_left = (state.active_panel == ActivePanel.LEFT)
         is_right = (state.active_panel == ActivePanel.RIGHT)
@@ -203,7 +210,7 @@ def run_commander_tui(
             0,
             panel_h,
             left_w,
-            "📂 Dataset & Schema",
+            "Dataset & Schema",
             is_focused=is_left,
             subtitle="Tab 1",
         )
@@ -218,8 +225,8 @@ def run_commander_tui(
         # Action Buttons
         f2_focus = is_left and state.left_focus_idx == 0
         edit_focus = is_left and state.left_focus_idx == 1
-        draw_button(stdscr, 3, 2, "📂 Finder (F2)", is_focused=f2_focus)
-        draw_button(stdscr, 3, 20, "⌨ Change Path", is_focused=edit_focus)
+        draw_button(stdscr, 3, 2, "Finder (F2)", is_focused=f2_focus)
+        draw_button(stdscr, 3, 18, "Change Path", is_focused=edit_focus)
 
         # Dataset Stats
         if state.loaded_dataset:
@@ -276,7 +283,7 @@ def run_commander_tui(
             left_w,
             panel_h,
             right_w,
-            "⚙️ MLX Format & Mappings",
+            "MLX Format & Mappings",
             is_focused=is_right,
             subtitle="Tab 2",
         )
@@ -363,7 +370,7 @@ def run_commander_tui(
         seed_focus = is_right and state.right_focus_idx == 4 + len(mapping_fields)
         rand_focus = is_right and state.right_focus_idx == 5 + len(mapping_fields)
         draw_field(stdscr, seed_y, left_w + 2, "Seed", str(state.seed), is_focused=seed_focus, val_width=12)
-        draw_button(stdscr, seed_y, left_w + 22, "🎲 Randomize (r)", is_focused=rand_focus)
+        draw_button(stdscr, seed_y, left_w + 22, "Randomize (r)", is_focused=rand_focus)
 
         # Output Folder
         out_y = seed_y + 1
@@ -373,10 +380,22 @@ def run_commander_tui(
         # Convert Action Button
         btn_y = panel_h - 2
         conv_focus = is_right and state.right_focus_idx == 7 + len(mapping_fields)
-        draw_button(stdscr, btn_y, left_w + 4, "⚡ Convert Dataset (F5)", is_focused=conv_focus)
+        draw_button(stdscr, btn_y, left_w + 4, "Convert Dataset (F5)", is_focused=conv_focus)
 
         # ----------------------------------------------------
-        # 4. Bottom Panel: Live Converted Record Preview
+        # 4. Middle Panel: Visual Column Mapping Pipeline
+        # ----------------------------------------------------
+        draw_mapping_pipeline_panel(
+            stdscr,
+            vis_y,
+            0,
+            vis_h,
+            max_x,
+            state,
+        )
+
+        # ----------------------------------------------------
+        # 5. Bottom Panel: Live Converted Record Preview
         # ----------------------------------------------------
         draw_box_panel(
             stdscr,
@@ -384,13 +403,13 @@ def run_commander_tui(
             0,
             preview_h,
             max_x,
-            "👁️ Live Converted Record Preview (MLX JSONL Format)",
+            "Live Converted Record Preview (MLX JSONL Format)",
             is_focused=False,
             subtitle=f"{state.target_format.value.upper()}",
         )
 
         if state.preview_error:
-            safe_addstr(stdscr, preview_y + 1, 3, f"⚠️  {state.preview_error}", get_color(5) | curses.A_BOLD)
+            safe_addstr(stdscr, preview_y + 1, 3, f"[!] {state.preview_error}", get_color(5) | curses.A_BOLD)
             safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", curses.A_DIM)
         elif not state.preview_cache:
             safe_addstr(stdscr, preview_y + 1, 3, "(No records to preview)", curses.A_DIM)
@@ -454,7 +473,7 @@ def run_commander_tui(
                     curr_row += 1
 
         # ----------------------------------------------------
-        # 5. Bottom Status / Hotkey Bar
+        # 6. Bottom Status / Hotkey Bar
         # ----------------------------------------------------
         footer_y = max_y - 1
         safe_addstr(stdscr, footer_y, 0, " " * max_x, hdr_attr)
@@ -463,7 +482,7 @@ def run_commander_tui(
         shortcuts_x = max(10, max_x - len(bar_shortcuts) - 2)
         avail_status = max(10, shortcuts_x - 4)
 
-        status_prefix = "✔ " if not state.status_is_error else "✖ "
+        status_prefix = "[OK] " if not state.status_is_error else "[ERR] "
         status_text = f"{status_prefix}{state.status_message}"[:avail_status]
         safe_addstr(stdscr, footer_y, 2, status_text, hdr_attr | curses.A_BOLD)
         safe_addstr(stdscr, footer_y, shortcuts_x, bar_shortcuts, hdr_attr)

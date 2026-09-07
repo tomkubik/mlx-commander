@@ -6,7 +6,7 @@ Includes menus, text input fields, panels, and styled dialogs.
 import curses
 import os
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def safe_addstr(win: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
@@ -73,7 +73,7 @@ def draw_header(stdscr: curses.window, title: str, step_info: str) -> None:
 
     stdscr.attron(header_attr)
     safe_addstr(stdscr, 0, 0, " " * max_x, header_attr)
-    safe_addstr(stdscr, 0, 2, f"🚀 HF ➜ MLX Dataset Converter  ::  {title}", header_attr)
+    safe_addstr(stdscr, 0, 2, f"MLX-Commander  ::  {title}", header_attr)
     stdscr.attroff(header_attr)
 
     if step_info:
@@ -466,7 +466,7 @@ def show_column_picker_dialog(
                         order_num = selected_cols.index(opt_name) + 1
                         box = f"[{order_num}]"
                     else:
-                        box = "[✓]"
+                        box = "[*]"
                 else:
                     box = "[ ]"
 
@@ -607,7 +607,7 @@ def show_results_dialog(stdscr: curses.window, result: Any) -> None:
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(3) | curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, " 🎉 Conversion Successful! ", get_color(3) | curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " [OK] Conversion Successful! ", get_color(3) | curses.A_BOLD)
         for r in range(1, h - 1):
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(3))
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(3) | curses.A_BOLD)
@@ -661,7 +661,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(2) | curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, " 📖 MLX-Commander Keyboard Shortcuts ", get_color(2) | curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " MLX-Commander Keyboard Shortcuts ", get_color(2) | curses.A_BOLD)
         for r in range(1, h - 1):
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(2))
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(2) | curses.A_BOLD)
@@ -678,3 +678,392 @@ def show_help_dialog(stdscr: curses.window) -> None:
         k = stdscr.getch()
         if k in (10, 13, 32, 27, ord("q"), ord("Q")):
             break
+
+
+def get_schema_mapping_targets(
+    target_format: Any,
+    mapping: Any,
+    available_columns: Optional[List[str]] = None,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """
+    Extract structured target fields and unmapped source columns.
+    Returns:
+      (targets, unmapped_columns)
+    Each target is:
+      {
+        "key": str,          # e.g. "prompt", "completion", "chosen", etc.
+        "label": str,        # display label
+        "type_str": str,     # e.g. "string", "string/dict", "list[dict]"
+        "required": bool,    # whether this field is required
+        "cols": List[str],   # mapped source columns (parsed from col_spec)
+        "is_concat": bool,   # True if 2 or more columns are combined
+      }
+    """
+    from mlx_commander.formats import MLXFormat, parse_column_list
+
+    avail = available_columns or []
+    targets: List[Dict[str, Any]] = []
+
+    if target_format == MLXFormat.PROMPT_COMPLETION:
+        prompt_spec = getattr(mapping, "prompt_col", None)
+        comp_spec = getattr(mapping, "completion_col", None)
+        p_cols = parse_column_list(prompt_spec, avail) if prompt_spec else []
+        c_cols = parse_column_list(comp_spec, avail) if comp_spec else []
+        targets.append({
+            "key": "prompt",
+            "label": "prompt",
+            "type_str": "string",
+            "required": True,
+            "cols": p_cols,
+            "is_concat": len(p_cols) > 1,
+        })
+        targets.append({
+            "key": "completion",
+            "label": "completion",
+            "type_str": "string",
+            "required": True,
+            "cols": c_cols,
+            "is_concat": len(c_cols) > 1,
+        })
+
+    elif target_format == MLXFormat.CHAT:
+        messages_col = getattr(mapping, "messages_col", None)
+        if messages_col:
+            m_cols = parse_column_list(messages_col, avail) if messages_col else []
+            targets.append({
+                "key": "messages",
+                "label": "messages",
+                "type_str": "list[dict]",
+                "required": True,
+                "cols": m_cols,
+                "is_concat": len(m_cols) > 1,
+            })
+        else:
+            u_cols = parse_column_list(getattr(mapping, "user_col", None), avail)
+            a_cols = parse_column_list(getattr(mapping, "assistant_col", None), avail)
+            s_cols = parse_column_list(getattr(mapping, "system_col", None), avail)
+            targets.append({
+                "key": "user",
+                "label": "user (turn)",
+                "type_str": "string",
+                "required": True,
+                "cols": u_cols,
+                "is_concat": len(u_cols) > 1,
+            })
+            targets.append({
+                "key": "assistant",
+                "label": "assistant (turn)",
+                "type_str": "string",
+                "required": True,
+                "cols": a_cols,
+                "is_concat": len(a_cols) > 1,
+            })
+            targets.append({
+                "key": "system",
+                "label": "system (prompt)",
+                "type_str": "string (opt)",
+                "required": False,
+                "cols": s_cols,
+                "is_concat": len(s_cols) > 1,
+            })
+
+    elif target_format == MLXFormat.DPO:
+        p_raw = getattr(mapping, "dpo_prompt_col", None) or getattr(mapping, "prompt_col", None)
+        p_cols = parse_column_list(p_raw, avail) if p_raw else []
+        c_cols = parse_column_list(getattr(mapping, "chosen_col", None), avail)
+        r_cols = parse_column_list(getattr(mapping, "rejected_col", None), avail)
+        targets.append({
+            "key": "prompt",
+            "label": "prompt",
+            "type_str": "string/dict",
+            "required": True,
+            "cols": p_cols,
+            "is_concat": len(p_cols) > 1,
+        })
+        targets.append({
+            "key": "chosen",
+            "label": "chosen (pref)",
+            "type_str": "string/dict",
+            "required": True,
+            "cols": c_cols,
+            "is_concat": len(c_cols) > 1,
+        })
+        targets.append({
+            "key": "rejected",
+            "label": "rejected (disp)",
+            "type_str": "string/dict",
+            "required": True,
+            "cols": r_cols,
+            "is_concat": len(r_cols) > 1,
+        })
+
+    elif target_format == MLXFormat.TEXT:
+        t_raw = getattr(mapping, "text_col", None)
+        t_cols = parse_column_list(t_raw, avail) if t_raw else []
+        targets.append({
+            "key": "text",
+            "label": "text",
+            "type_str": "string",
+            "required": True,
+            "cols": t_cols,
+            "is_concat": len(t_cols) > 1,
+        })
+
+    # Unmapped columns: original dataset columns that are not assigned to any target
+    mapped_set = set()
+    for t in targets:
+        for c in t["cols"]:
+            mapped_set.add(c)
+    unmapped = [c for c in avail if c not in mapped_set]
+
+    return targets, unmapped
+
+
+def plan_mapping_panel_rows(
+    targets: List[Dict[str, Any]],
+    unmapped: List[str],
+    avail_rows: int,
+) -> Tuple[List[int], bool]:
+    """
+    Determine row allocation for each target and whether to show unmapped columns.
+    Guarantees total rendered lines fits within avail_rows.
+    """
+    n = len(targets)
+    if n == 0 or avail_rows < 3:
+        return ([1] * max(1, n), False)
+
+    min_needed = 2 + (n - 1) + n  # 1 top border + 1 bottom border + (n - 1) dividers + n target rows
+    if avail_rows < min_needed:
+        return ([1] * n, False)
+
+    show_unmapped = False
+    if unmapped and avail_rows >= min_needed + 2:
+        show_unmapped = True
+
+    used = min_needed + (2 if show_unmapped else 0)
+    extra = avail_rows - used
+    heights = [1] * n
+
+    for i, t in enumerate(targets):
+        if extra > 0 and len(t["cols"]) > 1:
+            heights[i] += 1
+            extra -= 1
+
+    return heights, show_unmapped
+
+
+def draw_mapping_pipeline_panel(
+    win: curses.window,
+    y: int,
+    x: int,
+    h: int,
+    w: int,
+    state: Any,
+) -> None:
+    """
+    Draw the visual column mapping pipeline panel with:
+    - Bundled original columns reordered per MLX target field
+    - Matching jointed divider blocks on both source and target sides
+    - Clear flow routing joints connecting source bundles to MLX target blocks
+    - Concat badges and bracket tree joints for multi-column mappings
+    - Clean typography with zero emojis
+    """
+    if h < 4 or w < 50:
+        return
+
+    from mlx_commander.formats import MLXFormat
+
+    target_fmt = getattr(state, "target_format", MLXFormat.PROMPT_COMPLETION)
+    mapping = getattr(state, "mapping", None)
+    loaded_ds = getattr(state, "loaded_dataset", None)
+    avail_cols = loaded_ds.columns if loaded_ds else []
+
+    targets, unmapped = get_schema_mapping_targets(target_fmt, mapping, avail_cols)
+
+    # 1. Outer Box Panel
+    draw_box_panel(
+        win,
+        y,
+        x,
+        h,
+        w,
+        "Column Mapping Pipeline (Source -> Target MLX Schema)",
+        is_focused=False,
+        subtitle=target_fmt.value.upper(),
+    )
+
+    # 2. Dimensions and Header Row
+    box_w = max(22, min(28, (w - 24) // 2))
+    left_x = x + 2
+    right_x = x + w - box_w - 2
+    flow_x = left_x + box_w
+    flow_w = right_x - flow_x
+
+    header_y = y + 1
+    safe_addstr(win, header_y, left_x + 1, "ORIGINAL COLUMNS (BUNDLED)", curses.A_BOLD | get_color(4))
+    flow_title = "FLOW JOINTS"
+    safe_addstr(win, header_y, flow_x + max(0, (flow_w - len(flow_title)) // 2), flow_title, curses.A_DIM | get_color(2))
+    safe_addstr(win, header_y, right_x + 1, "TARGET MLX SCHEMA", curses.A_BOLD | get_color(4))
+
+    # 3. Row Allocation
+    start_y = y + 2
+    avail_rows = h - 3
+    if avail_rows < 2:
+        return
+
+    n = len(targets)
+    heights, show_unmapped = plan_mapping_panel_rows(targets, unmapped, avail_rows)
+
+    border_attr = get_color(2) if safe_has_colors() else curses.A_DIM
+    header_box_attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    green_attr = (get_color(3) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    cyan_attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    yellow_attr = (get_color(6) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    red_attr = (get_color(5) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    dim_attr = curses.A_DIM
+
+    curr_y = start_y
+
+    def fmt_border(left_char: str, right_char: str, title: str, width: int) -> str:
+        if title:
+            prefix = f"{left_char}─ {title} "
+            rem = width - len(prefix) - 1
+            if rem >= 0:
+                return prefix + "─" * rem + right_char
+        return left_char + "─" * (width - 2) + right_char
+
+    # Top Border of Boxes
+    if targets and curr_y < y + h - 1:
+        t0 = targets[0]
+        left_top = fmt_border("┌", "┐", f"Source: {t0['key']}", box_w)
+        right_top = fmt_border("┌", "┐", f"Target: {t0['key']}", box_w)
+        safe_addstr(win, curr_y, left_x, left_top, header_box_attr)
+        safe_addstr(win, curr_y, right_x, right_top, header_box_attr)
+        curr_y += 1
+
+    # Render each target block
+    for i, t in enumerate(targets):
+        cols = t["cols"]
+        b_h = heights[i]
+
+        for r in range(b_h):
+            if curr_y >= y + h - 1:
+                break
+
+            # Left Box Content
+            if not loaded_ds:
+                l_text = " (No dataset loaded)" if r == 0 else ""
+                l_attr = dim_attr
+            elif not cols:
+                l_text = " ! (none selected)" if r == 0 else ""
+                l_attr = red_attr if t["required"] else dim_attr
+            elif len(cols) == 1:
+                l_text = f" • {cols[0]}" if r == 0 else "   [1 column]"
+                l_attr = green_attr if r == 0 else dim_attr
+            elif len(cols) >= 2:
+                if b_h >= 2:
+                    c_name = cols[r] if r < len(cols) else cols[-1]
+                    l_text = f" • {c_name}"
+                    l_attr = cyan_attr
+                else:
+                    c_joined = " + ".join(cols)
+                    l_text = f" • {c_joined}"
+                    l_attr = cyan_attr
+
+            l_padded = f"│ {l_text:<{box_w - 4}} │"
+            safe_addstr(win, curr_y, left_x, l_padded, border_attr)
+            if l_text:
+                safe_addstr(win, curr_y, left_x + 2, l_text[:box_w - 4], l_attr)
+
+            # Right Box Content
+            if not loaded_ds:
+                r_text = f" ○ {t['key']} (awaiting)" if r == 0 else ""
+                r_attr = dim_attr
+            elif not cols:
+                r_status = "missing" if t["required"] else "optional"
+                r_text = f" ○ {t['key']} ({r_status})" if r == 0 else ""
+                r_attr = red_attr if t["required"] else dim_attr
+            else:
+                if r == 0:
+                    r_text = f" ● {t['key']}"
+                    r_attr = green_attr
+                else:
+                    r_text = f"   Type: {t['type_str']}"
+                    r_attr = dim_attr
+
+            r_padded = f"│ {r_text:<{box_w - 4}} │"
+            safe_addstr(win, curr_y, right_x, r_padded, border_attr)
+            if r_text:
+                safe_addstr(win, curr_y, right_x + 2, r_text[:box_w - 4], r_attr)
+
+            # Center Flow Joints
+            if not loaded_ds:
+                msg = "(awaiting dataset)"
+                rem_flow = flow_w - len(msg) - 8
+                dash1 = max(1, rem_flow // 2)
+                dash2 = max(1, rem_flow - dash1)
+                c_flow = f" {'- ' * (dash1 // 2)}{msg}{' -' * (dash2 // 2)}► "
+                safe_addstr(win, curr_y, flow_x, c_flow[:flow_w], dim_attr)
+            elif not cols:
+                c_flow = f" {'- ' * max(1, flow_w // 2 - 2)}► "
+                safe_addstr(win, curr_y, flow_x, c_flow[:flow_w], red_attr if t["required"] else dim_attr)
+            elif len(cols) == 1:
+                bar_len = max(2, flow_w - 4)
+                c_flow = f" {'─' * bar_len}► "
+                safe_addstr(win, curr_y, flow_x, c_flow[:flow_w], green_attr)
+            elif len(cols) >= 2:
+                badge = "[ + Concat ]"
+                lead = " ──┴──► "
+                lead_len = len(lead)
+                badge_len = len(badge)
+                bar_len = max(2, flow_w - lead_len - badge_len - 3)
+                tail = f" {'─' * bar_len}► "
+
+                if b_h >= 2 and r == 0:
+                    c_flow = " ──╮"
+                    safe_addstr(win, curr_y, flow_x, c_flow, cyan_attr)
+                else:
+                    safe_addstr(win, curr_y, flow_x, lead, cyan_attr)
+                    safe_addstr(win, curr_y, flow_x + lead_len, badge, cyan_attr | curses.A_STANDOUT)
+                    safe_addstr(win, curr_y, flow_x + lead_len + badge_len, tail, green_attr)
+
+            curr_y += 1
+
+        # Divider joint between target blocks
+        if curr_y < y + h - 1:
+            if i < n - 1:
+                next_t = targets[i + 1]
+                left_div = fmt_border("├", "┤", f"Source: {next_t['key']}", box_w)
+                right_div = fmt_border("├", "┤", f"Target: {next_t['key']}", box_w)
+                safe_addstr(win, curr_y, left_x, left_div, header_box_attr)
+                safe_addstr(win, curr_y, right_x, right_div, header_box_attr)
+                curr_y += 1
+
+    # Close Right Box
+    if curr_y < y + h - 1:
+        right_bot = fmt_border("└", "┘", "", box_w)
+        safe_addstr(win, curr_y, right_x, right_bot, border_attr)
+
+    # Unmapped columns section
+    if show_unmapped and curr_y < y + h - 2:
+        left_unmap_div = fmt_border("├", "┤", "Unmapped Columns", box_w)
+        safe_addstr(win, curr_y, left_x, left_unmap_div, header_box_attr)
+        curr_y += 1
+
+        if curr_y < y + h - 1:
+            unmapped_str = " · " + ", ".join(unmapped)
+            avail_unmap = box_w - 4
+            if len(unmapped_str) > avail_unmap:
+                unmapped_str = unmapped_str[:avail_unmap - 1] + "…"
+            l_unmap_padded = f"│ {unmapped_str:<{box_w - 4}} │"
+            safe_addstr(win, curr_y, left_x, l_unmap_padded, border_attr)
+            safe_addstr(win, curr_y, left_x + 2, unmapped_str, yellow_attr | dim_attr)
+
+            unmap_flow = " - - - (ignored / excluded)"
+            safe_addstr(win, curr_y, flow_x, unmap_flow[:flow_w], dim_attr)
+            curr_y += 1
+
+    # Close Left Box
+    if curr_y < y + h:
+        left_bot = fmt_border("└", "┘", "", box_w)
+        safe_addstr(win, curr_y, left_x, left_bot, border_attr)

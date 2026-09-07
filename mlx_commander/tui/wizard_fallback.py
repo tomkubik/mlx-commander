@@ -280,7 +280,7 @@ def _ask_choice_interactive(title: str, options: List[str], default_idx: int = 0
 
     # Clear options list and display the confirmed selection cleanly
     sys.stdout.write(f"\033[{total_lines}A\r")
-    sys.stdout.write(f"\033[2K  {GREEN}✔{RESET} {BOLD}{selected_idx + 1}) {options[selected_idx]}{RESET}\n")
+    sys.stdout.write(f"\033[2K  {GREEN}*{RESET} {BOLD}{selected_idx + 1}) {options[selected_idx]}{RESET}\n")
     for _ in range(total_lines - 1):
         sys.stdout.write("\033[2K\n")
     sys.stdout.write(f"\033[{total_lines - 1}A\r")
@@ -316,7 +316,7 @@ def select_column_cli(
         opts.append("(None / Skip)")
     opts.extend(columns)
     if allow_multiple and len(columns) > 1:
-        opts.append("➕ Combine multiple columns (Concatenate with ' + ')")
+        opts.append("[+] Combine multiple columns (Concatenate with ' + ')")
 
     def_idx = 0
     if default_col and default_col in columns:
@@ -356,7 +356,7 @@ def run_interactive_wizard(
 ) -> ConversionResult:
     """Run interactive CLI wizard step-by-step."""
     print(f"\n{CYAN}{BOLD}======================================================{RESET}")
-    print(f"{CYAN}{BOLD}    🚀 Hugging Face ➜ Apple MLX Dataset Converter     {RESET}")
+    print(f"{CYAN}{BOLD}       Hugging Face ➜ Apple MLX Dataset Converter     {RESET}")
     print(f"{CYAN}{BOLD}======================================================{RESET}\n")
 
     # Step 1: Dataset path
@@ -374,9 +374,9 @@ def run_interactive_wizard(
             path_choice = ask_choice(
                 "How would you like to select your dataset?",
                 [
-                    "📂 Open GUI Finder Picker (Select Dataset Folder or File)",
-                    f"⚡ Use Current Working Folder ({default_dir})",
-                    "⌨️  Enter path manually",
+                    "Open GUI Finder Picker (Select Dataset Folder or File)",
+                    f"Use Current Working Folder ({default_dir})",
+                    "Enter path manually",
                 ],
                 default_idx=0,
             )
@@ -399,7 +399,7 @@ def run_interactive_wizard(
             print(f"{RED}Error loading dataset from '{target_path}': {e}{RESET}")
             target_path = None
 
-    print(f"\n{GREEN}✔ Dataset loaded successfully!{RESET}")
+    print(f"\n{GREEN}[OK] Dataset loaded successfully!{RESET}")
     print(f"  • Source: {dataset.source_path}")
     print(f"  • Total records: {dataset.total_rows:,}")
     print(f"  • Splits found: [{', '.join(dataset.split_names)}]")
@@ -569,9 +569,9 @@ def run_interactive_wizard(
         out_choice = ask_choice(
             "How would you like to select output destination folder?",
             [
-                f"⚡ Use Default Output Folder ({default_out})",
-                "📂 Open GUI Folder Picker (Choose in macOS Finder)",
-                "⌨️  Enter path manually",
+                f"Use Default Output Folder ({default_out})",
+                "Open GUI Folder Picker (Choose in macOS Finder)",
+                "Enter path manually",
             ],
             default_idx=0,
         )
@@ -608,7 +608,7 @@ def run_interactive_wizard(
         use_existing_splits=use_existing,
     )
 
-    print(f"\n{GREEN}{BOLD}🎉 Conversion Complete!{RESET}\n")
+    print(f"\n{GREEN}{BOLD}Conversion Complete!{RESET}\n")
     print(f"Saved to directory: {BOLD}{result.output_dir}{RESET}")
     for s_name, path in result.output_files.items():
         cnt = result.record_counts.get(s_name, 0)

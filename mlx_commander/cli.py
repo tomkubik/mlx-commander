@@ -232,7 +232,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             result = run_direct_conversion(args)
             src_desc = f"{len(args.dataset)} files (merged)" if isinstance(args.dataset, list) and len(args.dataset) > 1 else (args.dataset[0] if isinstance(args.dataset, list) else str(args.dataset))
-            print(f"✔ Successfully converted {src_desc} to {args.format} format in {result.output_dir}")
+            print(f"[OK] Successfully converted {src_desc} to {args.format} format in {result.output_dir}")
             for s_name, path in result.output_files.items():
                 cnt = result.record_counts.get(s_name, 0)
                 print(f"  • {path.name}: {cnt:,} records")

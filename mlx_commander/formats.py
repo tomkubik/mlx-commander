@@ -200,7 +200,7 @@ def validate_mapping(
         check_cols(mapping.completion_col, "Completion", required=True)
 
     elif format_type == MLXFormat.DPO:
-        check_cols(mapping.dpo_prompt_col, "Prompt", required=True)
+        check_cols(mapping.dpo_prompt_col or mapping.prompt_col, "Prompt", required=True)
         check_cols(mapping.chosen_col, "Chosen", required=True)
         check_cols(mapping.rejected_col, "Rejected", required=True)
 
@@ -284,10 +284,11 @@ def format_record(
         return {"prompt": prompt, "completion": completion}
 
     elif format_type == MLXFormat.DPO:
-        if mapping.dpo_prompt_col and mapping.dpo_prompt_col in record and isinstance(record[mapping.dpo_prompt_col], (dict, list)):
-            p_val = record[mapping.dpo_prompt_col]
+        p_col = mapping.dpo_prompt_col or mapping.prompt_col
+        if p_col and p_col in record and isinstance(record[p_col], (dict, list)):
+            p_val = record[p_col]
         else:
-            p_val = get_column_value(record, mapping.dpo_prompt_col)
+            p_val = get_column_value(record, p_col)
 
         if mapping.chosen_col and mapping.chosen_col in record and isinstance(record[mapping.chosen_col], (dict, list)):
             c_val = record[mapping.chosen_col]

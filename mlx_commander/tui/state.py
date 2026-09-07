@@ -79,7 +79,7 @@ class CommanderState:
             # Auto-detect column mapping for current format
             self.mapping = auto_detect_mapping(self.target_format, ds.columns)
             if "Merged (" in ds.source_path:
-                self.status_message = f"✔ {ds.source_path}: {ds.total_rows:,} records merged. Schemas verified."
+                self.status_message = f"[OK] {ds.source_path}: {ds.total_rows:,} records merged. Schemas verified."
             else:
                 self.status_message = f"Loaded {ds.total_rows:,} records with {len(ds.columns)} columns."
             self.status_is_error = False
@@ -210,7 +210,7 @@ class CommanderState:
                 {
                     "key": "prompt_col",
                     "label": "Prompt Col",
-                    "current": self.mapping.prompt_col,
+                    "current": self.mapping.dpo_prompt_col or self.mapping.prompt_col,
                     "help": "Column containing prompt",
                 },
                 {
@@ -232,4 +232,8 @@ class CommanderState:
         """Update a specific mapping field and refresh preview."""
         if hasattr(self.mapping, key):
             setattr(self.mapping, key, value)
+            if key == "prompt_col" and self.target_format == MLXFormat.DPO:
+                self.mapping.dpo_prompt_col = value
+            elif key == "dpo_prompt_col":
+                self.mapping.prompt_col = value
             self.update_preview()
