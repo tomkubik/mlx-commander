@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from hf2mlx.formats import ColumnMapping, MLXFormat, format_record, validate_mapping
-from hf2mlx.loader import LoadedDataset
-from hf2mlx.splitter import SplitConfig, split_records
+from mlx_commander.formats import ColumnMapping, MLXFormat, format_record, validate_mapping
+from mlx_commander.loader import LoadedDataset
+from mlx_commander.splitter import SplitConfig, split_records
 
 
 @dataclass

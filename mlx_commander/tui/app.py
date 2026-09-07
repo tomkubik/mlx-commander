@@ -18,22 +18,22 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from hf2mlx.converter import ConversionResult, convert_and_save
-from hf2mlx.formats import (
+from mlx_commander.converter import ConversionResult, convert_and_save
+from mlx_commander.formats import (
     ColumnMapping,
     MLXFormat,
     auto_detect_mapping,
     format_record,
     validate_mapping,
 )
-from hf2mlx.loader import LoadedDataset, load_local_dataset
-from hf2mlx.splitter import (
+from mlx_commander.loader import LoadedDataset, load_local_dataset
+from mlx_commander.splitter import (
     SplitConfig,
     calculate_split_counts,
     generate_random_seed,
 )
-from hf2mlx.tui.state import ActivePanel, CommanderState
-from hf2mlx.tui.widgets import (
+from mlx_commander.tui.state import ActivePanel, CommanderState
+from mlx_commander.tui.widgets import (
     configure_escdelay,
     draw_box_panel,
     draw_button,
@@ -427,12 +427,13 @@ def run_commander_tui(
         elif key in (curses.KEY_F2, 15):  # F2 or Ctrl+O
             curses.def_prog_mode()
             curses.endwin()
-            from hf2mlx.gui_picker import pick_dataset_gui
+            from mlx_commander.gui_picker import pick_dataset_gui
             chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
             curses.reset_prog_mode()
             stdscr.refresh()
             if chosen:
-                state.load_dataset(chosen)
+                if not state.load_dataset(chosen):
+                    show_results_dialog(stdscr, False, f"{state.status_message}")
 
         elif key == curses.KEY_F5:
             res = execute_conversion(stdscr, state)
@@ -462,21 +463,23 @@ def run_commander_tui(
                 if state.left_focus_idx == 0:  # Finder button
                     curses.def_prog_mode()
                     curses.endwin()
-                    from hf2mlx.gui_picker import pick_dataset_gui
+                    from mlx_commander.gui_picker import pick_dataset_gui
                     chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
                     curses.reset_prog_mode()
                     stdscr.refresh()
                     if chosen:
-                        state.load_dataset(chosen)
+                        if not state.load_dataset(chosen):
+                            show_results_dialog(stdscr, False, f"{state.status_message}")
                 elif state.left_focus_idx == 1:  # Edit path
                     new_path = show_text_edit_dialog(
                         stdscr,
                         "Change Dataset Path",
-                        "Enter path to local HF dataset folder or file:",
+                        "Enter path(s) to local HF dataset (comma/newline separated for multiple):",
                         default_val=state.dataset_path or os.getcwd(),
                     )
                     if new_path:
-                        state.load_dataset(new_path)
+                        if not state.load_dataset(new_path):
+                            show_results_dialog(stdscr, False, f"{state.status_message}")
 
         # Navigation in Right Panel
         elif is_right:

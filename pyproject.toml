@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hf2mlx"
+name = "mlx-commander"
 version = "0.1.0"
 description = "CLI & TUI tool to convert Hugging Face datasets into Apple MLX dataset formats"
 readme = "README.md"
@@ -27,8 +27,7 @@ all = [
 ]
 
 [project.scripts]
-hf2mlx = "hf2mlx.cli:main"
-mlx-commander = "hf2mlx.cli:main"
+mlx-commander = "mlx_commander.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["hf2mlx*"]
+include = ["mlx_commander*"]

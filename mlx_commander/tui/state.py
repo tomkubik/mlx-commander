@@ -11,16 +11,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from hf2mlx.converter import ConversionResult, convert_and_save
-from hf2mlx.formats import (
+from mlx_commander.converter import ConversionResult, convert_and_save
+from mlx_commander.formats import (
     ColumnMapping,
     MLXFormat,
     auto_detect_mapping,
     format_record,
     validate_mapping,
 )
-from hf2mlx.loader import LoadedDataset, load_local_dataset
-from hf2mlx.splitter import (
+from mlx_commander.loader import LoadedDataset, load_local_dataset
+from mlx_commander.splitter import (
     SplitConfig,
     calculate_split_counts,
     generate_random_seed,
@@ -60,27 +60,28 @@ class CommanderState:
     preview_cache: List[str] = field(default_factory=list)
     preview_error: Optional[str] = None
 
-    def load_dataset(self, path_str: str) -> bool:
-        """Load dataset from disk and update state."""
-        clean_path = path_str.strip()
-        if not clean_path:
+    def load_dataset(self, path_input: Any) -> bool:
+        """Load dataset from disk (single file/folder or multiple merged files) and update state."""
+        if not path_input:
             self.status_message = "Path cannot be empty."
             self.status_is_error = True
             return False
 
-        p = Path(clean_path).expanduser().resolve()
         try:
-            self.status_message = f"Loading dataset from {p.name}..."
+            self.status_message = "Loading dataset..."
             self.status_is_error = False
-            ds = load_local_dataset(p)
+            ds = load_local_dataset(path_input)
             self.loaded_dataset = ds
-            self.dataset_path = str(p)
+            self.dataset_path = ds.source_path
             self.selected_column_idx = 0
             self.column_scroll_offset = 0
 
             # Auto-detect column mapping for current format
             self.mapping = auto_detect_mapping(self.target_format, ds.columns)
-            self.status_message = f"Loaded {ds.total_rows:,} records with {len(ds.columns)} columns."
+            if "Merged (" in ds.source_path:
+                self.status_message = f"✔ {ds.source_path}: {ds.total_rows:,} records merged. Schemas verified."
+            else:
+                self.status_message = f"Loaded {ds.total_rows:,} records with {len(ds.columns)} columns."
             self.status_is_error = False
             self.update_preview()
             return True

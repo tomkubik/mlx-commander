@@ -9,7 +9,7 @@ int main(int argc, const char * argv[]) {
         NSOpenPanel *panel = [NSOpenPanel openPanel];
         panel.canChooseFiles = YES;
         panel.canChooseDirectories = YES;
-        panel.allowsMultipleSelection = NO;
+        panel.allowsMultipleSelection = YES;
         panel.canCreateDirectories = YES;
         panel.title = @"Select Dataset (File or Folder)";
         panel.prompt = @"Select";
@@ -20,15 +20,18 @@ int main(int argc, const char * argv[]) {
             if ([mode isEqualToString:@"folder"]) {
                 panel.canChooseFiles = NO;
                 panel.canChooseDirectories = YES;
+                panel.allowsMultipleSelection = NO;
                 panel.title = @"Select Destination Folder";
             } else if ([mode isEqualToString:@"file"]) {
                 panel.canChooseFiles = YES;
                 panel.canChooseDirectories = NO;
-                panel.title = @"Select Dataset File";
+                panel.allowsMultipleSelection = YES;
+                panel.title = @"Select Dataset File(s)";
             } else {
                 panel.canChooseFiles = YES;
                 panel.canChooseDirectories = YES;
-                panel.title = @"Select Dataset (File or Folder)";
+                panel.allowsMultipleSelection = YES;
+                panel.title = @"Select Dataset (File, Files, or Folder)";
             }
         }
 
@@ -54,11 +57,12 @@ int main(int argc, const char * argv[]) {
 
         NSModalResponse response = [panel runModal];
         if (response == NSModalResponseOK) {
-            NSURL *selectedURL = [[panel URLs] firstObject];
-            if (selectedURL) {
-                printf("%s\n", [[selectedURL path] UTF8String]);
-                fflush(stdout);
+            for (NSURL *selectedURL in [panel URLs]) {
+                if (selectedURL) {
+                    printf("%s\n", [[selectedURL path] UTF8String]);
+                }
             }
+            fflush(stdout);
         }
     }
     return 0;

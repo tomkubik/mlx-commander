@@ -1,12 +1,12 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="hf2mlx",
+    name="mlx-commander",
     version="0.1.0",
     packages=find_packages(),
     entry_points={
         "console_scripts": [
-            "hf2mlx = hf2mlx.cli:main",
+            "mlx-commander = mlx_commander.cli:main",
         ],
     },
 )

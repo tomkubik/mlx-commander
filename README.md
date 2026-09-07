@@ -1,4 +1,4 @@
-# MLX-Commander 🚀 (`hf2mlx`)
+# MLX-Commander 🚀
 
 A fast, persistent dual-panel TUI (Norton Commander style) & CLI converter for preparing Hugging Face datasets into Apple Silicon MLX fine-tuning formats (`mlx-lm`).
 
@@ -9,6 +9,7 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 ## 🌟 Key Features
 
 - **Persistent Multi-Panel TUI (Norton Commander style)**: Full keyboard navigation (`Tab` to switch panels, `↑`/`↓` to navigate, `Enter` to edit/open dropdowns, `F2` for Finder, `F5` to convert).
+- **Multi-File Selection & Dataset Merging**: Select multiple dataset files at once (e.g. combining pre-split `train.jsonl` and `test.jsonl`). Verifies that all files have identical column schemas and merges them so you can randomize fresh Train / Validation / Test sets from scratch with a custom seed.
 - **Multi-Column Concatenation**: Tap `Space` to multi-select and order columns from the original dataset (e.g. `instruction + input`) to concatenate them seamlessly with `\n\n`.
 - **Live Reactive Preview**: Sample records format in real time as you change target formats or adjust column mappings.
 - **Instantaneous ESC Response**: Curses escape delay configured to 25ms (< 1 frame), making modal dismissal instantaneous while preserving arrow and function keys.
@@ -39,15 +40,17 @@ python3 run.py
 python3 .
 
 # Or as a Python package module:
-python3 -m hf2mlx
+python3 -m mlx_commander
 
-# Or via shell wrapper:
-./hf2mlx_cli
+# Or via executable runner:
+./mlx-commander
 ```
 
-You can also pass arguments directly (e.g. pre-loading a dataset):
+You can also pass arguments directly (e.g. pre-loading a dataset or multiple files):
 ```bash
 python3 run.py -d /path/to/my_hf_dataset
+# Or combine multiple files:
+python3 run.py -d train.jsonl test.jsonl
 ```
 
 ### 2. Line-by-Line Wizard Mode
@@ -55,7 +58,7 @@ python3 run.py -d /path/to/my_hf_dataset
 For SSH sessions or non-curses environments:
 
 ```bash
-./hf2mlx_cli --wizard
+./mlx-commander --wizard
 ```
 
 ### 3. Direct Command-Line Conversion (Automated / Headless)
@@ -63,7 +66,7 @@ For SSH sessions or non-curses environments:
 You can pass all options via flags for direct scripted conversions:
 
 ```bash
-./hf2mlx_cli \
+./mlx-commander \
   --dataset /path/to/my_hf_dataset \
   --format prompt_completion \
   --prompt-col instruction \
@@ -80,15 +83,16 @@ You can pass all options via flags for direct scripted conversions:
 ## 🖥️ Command Line Reference
 
 ```
-usage: hf2mlx [-h] [-v] [-d DATASET] [-f {text,chat,prompt_completion,dpo}]
-              [-o OUTPUT] [--train TRAIN] [--valid VALID] [--test TEST]
-              [--seed SEED] [--keep-splits] [--mapping MAPPING]
-              [--text-col TEXT_COL] [--text-template TEXT_TEMPLATE]
-              [--prompt-col PROMPT_COL] [--completion-col COMPLETION_COL]
-              [--messages-col MESSAGES_COL] [--user-col USER_COL]
-              [--assistant-col ASSISTANT_COL] [--system-col SYSTEM_COL]
-              [--chosen-col CHOSEN_COL] [--rejected-col REJECTED_COL] [--tui]
-              [--no-tui]
+usage: mlx-commander [-h] [-v] [-d DATASET [DATASET ...]]
+                     [-f {text,chat,prompt_completion,dpo}]
+                     [-o OUTPUT] [--train TRAIN] [--valid VALID] [--test TEST]
+                     [--seed SEED] [--keep-splits] [--mapping MAPPING]
+                     [--text-col TEXT_COL] [--text-template TEXT_TEMPLATE]
+                     [--prompt-col PROMPT_COL] [--completion-col COMPLETION_COL]
+                     [--messages-col MESSAGES_COL] [--user-col USER_COL]
+                     [--assistant-col ASSISTANT_COL] [--system-col SYSTEM_COL]
+                     [--chosen-col CHOSEN_COL] [--rejected-col REJECTED_COL]
+                     [--commander] [--wizard]
 ```
 
 ### Key Flags:

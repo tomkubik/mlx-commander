@@ -24,7 +24,7 @@ if venv_python.is_file() and sys.executable != str(venv_python):
 if str(base_dir) not in sys.path:
     sys.path.insert(0, str(base_dir))
 
-from hf2mlx.cli import main
+from mlx_commander.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

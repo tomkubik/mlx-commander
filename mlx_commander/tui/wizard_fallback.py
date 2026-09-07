@@ -12,16 +12,16 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from hf2mlx.converter import ConversionResult, convert_and_save
-from hf2mlx.formats import (
+from mlx_commander.converter import ConversionResult, convert_and_save
+from mlx_commander.formats import (
     ColumnMapping,
     MLXFormat,
     auto_detect_mapping,
     format_record,
     validate_mapping,
 )
-from hf2mlx.loader import LoadedDataset, load_local_dataset
-from hf2mlx.splitter import (
+from mlx_commander.loader import LoadedDataset, load_local_dataset
+from mlx_commander.splitter import (
     SplitConfig,
     calculate_split_counts,
     generate_random_seed,
@@ -332,7 +332,7 @@ def select_column_cli(
             "Enter column numbers or names to concatenate (e.g., '1, 2' or 'instruction + input')",
             default=default_col or columns[0],
         )
-        from hf2mlx.formats import parse_column_list
+        from mlx_commander.formats import parse_column_list
         parts = parse_column_list(resp)
         resolved = []
         for p in parts:
@@ -360,7 +360,7 @@ def run_interactive_wizard(
     print(f"{CYAN}{BOLD}======================================================{RESET}\n")
 
     # Step 1: Dataset path
-    from hf2mlx.gui_picker import pick_folder_gui, pick_file_gui
+    from mlx_commander.gui_picker import pick_folder_gui, pick_file_gui
     import os
 
     dataset: Optional[LoadedDataset] = None
@@ -382,7 +382,7 @@ def run_interactive_wizard(
             )
             if path_choice == 0:
                 print(f"{CYAN}Opening Finder window...{RESET}")
-                from hf2mlx.gui_picker import pick_dataset_gui
+                from mlx_commander.gui_picker import pick_dataset_gui
                 chosen = pick_dataset_gui(default_dir=default_dir)
                 if not chosen:
                     print(f"{YELLOW}No path chosen. Please choose an option or enter path manually.{RESET}")

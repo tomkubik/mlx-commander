@@ -8,10 +8,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hf2mlx.converter import convert_and_save
-from hf2mlx.formats import ColumnMapping, MLXFormat
-from hf2mlx.loader import load_local_dataset
-from hf2mlx.splitter import SplitConfig
+from mlx_commander.converter import convert_and_save
+from mlx_commander.formats import ColumnMapping, MLXFormat
+from mlx_commander.loader import load_local_dataset
+from mlx_commander.splitter import SplitConfig
 from tests.conftest import make_sample_qa_records
 
 

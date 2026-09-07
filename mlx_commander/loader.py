@@ -70,14 +70,51 @@ class LoadedDataset:
         return list(self.iter_records())
 
 
-def inspect_dataset_path(path_str: str) -> Tuple[bool, str]:
+def _normalize_path_list(path_input: Union[str, Path, List[Union[str, Path]]]) -> List[str]:
+    """Normalize input into a clean list of individual path strings."""
+    if isinstance(path_input, list):
+        out = []
+        for item in path_input:
+            out.extend(_normalize_path_list(item))
+        return out
+    if isinstance(path_input, Path):
+        return [str(path_input)]
+    if isinstance(path_input, str):
+        lines = [l.strip() for l in path_input.splitlines() if l.strip()]
+        if len(lines) > 1:
+            return lines
+        if "," in path_input and not Path(path_input).exists():
+            parts = [p.strip() for p in path_input.split(",") if p.strip()]
+            if len(parts) > 1:
+                return parts
+        if path_input.strip():
+            return [path_input.strip()]
+    return []
+
+
+def inspect_dataset_path(path_input: Union[str, Path, List[Union[str, Path]]]) -> Tuple[bool, str]:
     """
-    Validate path and return (is_valid, error_or_info_message).
+    Validate path(s) and return (is_valid, error_or_info_message).
+    Supports single file/folder, newline-separated, or comma-separated list of files.
     """
-    path = Path(path_str).expanduser().resolve()
-    if not path.exists():
-        return False, f"Path does not exist: {path}"
-    return True, f"Found: {path}"
+    raw_paths = _normalize_path_list(path_input)
+    if not raw_paths:
+        return False, "No dataset path provided."
+
+    if len(raw_paths) == 1:
+        path = Path(raw_paths[0]).expanduser().resolve()
+        if not path.exists():
+            return False, f"Path does not exist: {path}"
+        return True, f"Found: {path}"
+
+    missing = []
+    for rp in raw_paths:
+        p = Path(rp).expanduser().resolve()
+        if not p.exists():
+            missing.append(str(p))
+    if missing:
+        return False, f"Missing file(s): {', '.join(missing)}"
+    return True, f"Found {len(raw_paths)} files to merge."
 
 
 def load_from_json_or_jsonl(file_path: Path) -> List[Dict[str, Any]]:
@@ -157,12 +194,8 @@ def is_hf_save_to_disk_dir(path: Path) -> bool:
     return (has_dict or (has_info and has_arrow) or (has_state and has_arrow))
 
 
-def load_local_dataset(path_str: str) -> LoadedDataset:
-    """
-    Load a Hugging Face dataset or dataset files from the local drive.
-    Returns a unified LoadedDataset instance.
-    """
-    path = Path(path_str).expanduser().resolve()
+def load_single_local_dataset(path: Path) -> LoadedDataset:
+    """Load a single dataset path (file or folder)."""
     if not path.exists():
         raise FileNotFoundError(f"Dataset path not found: {path}")
 
@@ -317,3 +350,83 @@ def load_local_dataset(path_str: str) -> LoadedDataset:
         sample_records=sample_records,
         _raw_splits=raw_splits,
     )
+
+
+def load_local_dataset(path_input: Union[str, Path, List[Union[str, Path]]]) -> LoadedDataset:
+    """
+    Load a Hugging Face dataset or data files from local drive.
+    Supports:
+      - Single file or folder (str or Path)
+      - List of files (List[str] or List[Path])
+      - Newline-separated or comma-separated file paths in a single string
+
+    When multiple files are provided:
+      1. Verifies that all files exist.
+      2. Validates schema consistency across all files (matching columns).
+         Raises ValueError with detailed differences if schemas do not match.
+      3. Merges records into a single consolidated dataset ready for
+         randomized train/validation/test re-splitting from scratch with a custom seed.
+    """
+    raw_paths = _normalize_path_list(path_input)
+    if not raw_paths:
+        raise ValueError("No dataset path provided.")
+
+    if len(raw_paths) == 1:
+        single_path = Path(raw_paths[0]).expanduser().resolve()
+        return load_single_local_dataset(single_path)
+
+    # Multi-file loading & merging with schema validation
+    loaded_datasets: List[LoadedDataset] = []
+    for rp in raw_paths:
+        p = Path(rp).expanduser().resolve()
+        if not p.exists():
+            raise FileNotFoundError(f"Dataset file not found: {p}")
+        loaded = load_single_local_dataset(p)
+        loaded_datasets.append(loaded)
+
+    # 1. Schema Consistency Validation
+    base_ds = loaded_datasets[0]
+    base_cols = base_ds.columns
+    base_cols_set = set(base_cols)
+    base_name = Path(base_ds.source_path).name or base_ds.source_path
+
+    for other_ds in loaded_datasets[1:]:
+        other_cols_set = set(other_ds.columns)
+        other_name = Path(other_ds.source_path).name or other_ds.source_path
+        if base_cols_set != other_cols_set:
+            missing_in_other = base_cols_set - other_cols_set
+            extra_in_other = other_cols_set - base_cols_set
+            diff_parts = []
+            if missing_in_other:
+                diff_parts.append(f"Missing in '{other_name}': {sorted(missing_in_other)}")
+            if extra_in_other:
+                diff_parts.append(f"Extra in '{other_name}': {sorted(extra_in_other)}")
+            diff_str = "; ".join(diff_parts)
+            raise ValueError(
+                f"Schema mismatch detected across dataset files!\n"
+                f"  • '{base_name}' columns ({len(base_cols)}): {base_cols}\n"
+                f"  • '{other_name}' columns ({len(other_ds.columns)}): {other_ds.columns}\n"
+                f"Difference: {diff_str}\n"
+                f"Cannot merge datasets with incompatible columns."
+            )
+
+    # 2. Merge records across all files
+    merged_records: List[Dict[str, Any]] = []
+    for ds in loaded_datasets:
+        merged_records.extend(ds.get_all_records())
+
+    total_rows = len(merged_records)
+    filenames = [Path(d.source_path).name for d in loaded_datasets]
+    summary_path = f"Merged ({len(loaded_datasets)} files: {', '.join(filenames)})"
+
+    return LoadedDataset(
+        source_path=summary_path,
+        is_split=False,
+        split_names=["default"],
+        split_counts={"default": total_rows},
+        columns=base_cols,
+        total_rows=total_rows,
+        sample_records=merged_records[:5],
+        _raw_splits={"default": merged_records},
+    )
+

@@ -157,7 +157,7 @@ def run_text_input(
     Display a text input screen with cursor editing, auto-completion, and default value.
     Supports triggering a native GUI file/folder picker via [Ctrl+O] or [F2].
     """
-    from hf2mlx.gui_picker import pick_dataset_gui, pick_folder_gui
+    from mlx_commander.gui_picker import pick_dataset_gui, pick_folder_gui
 
     configure_escdelay(25)
     safe_curs_set(1)
@@ -219,7 +219,7 @@ def run_text_input(
             curses.def_prog_mode()
             curses.endwin()
             curr_path = "".join(text).strip() or os.getcwd()
-            from hf2mlx.gui_picker import pick_dataset_gui, pick_folder_gui
+            from mlx_commander.gui_picker import pick_dataset_gui, pick_folder_gui
             if gui_picker_type == "folder":
                 chosen = pick_folder_gui("Select Destination Folder", default_dir=curr_path)
             else:
@@ -400,7 +400,7 @@ def show_column_picker_dialog(
     - [Enter]: Confirm selection.
     - [Esc] / [q]: Cancel and return previous value without delay.
     """
-    from hf2mlx.formats import parse_column_list
+    from mlx_commander.formats import parse_column_list
 
     configure_escdelay(25)
     options = []

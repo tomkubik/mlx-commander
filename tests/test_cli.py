@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hf2mlx.cli import build_parser, main, parse_mapping_arg
+from mlx_commander.cli import build_parser, main, parse_mapping_arg
 from tests.conftest import make_sample_qa_records
 
 
@@ -67,7 +67,7 @@ class TestCLI(unittest.TestCase):
     def test_interactive_wizard(self):
         import io
         import sys
-        from hf2mlx.tui.wizard_fallback import run_interactive_wizard
+        from mlx_commander.tui.wizard_fallback import run_interactive_wizard
 
         inputs = [
             "3",    # Format: prompt_completion
@@ -97,15 +97,15 @@ class TestCLI(unittest.TestCase):
         cmds = [
             [python_bin, "run.py", "--version"],
             [python_bin, ".", "--version"],
-            [python_bin, "-m", "hf2mlx", "--version"],
-            [python_bin, "./hf2mlx_cli", "--version"],
-            ["bash", "./hf2mlx_cli", "--version"],
-            ["./hf2mlx_cli", "--version"],
+            [python_bin, "-m", "mlx_commander", "--version"],
+            [python_bin, "./mlx-commander", "--version"],
+            ["bash", "./mlx-commander", "--version"],
+            ["./mlx-commander", "--version"],
         ]
         for cmd in cmds:
             p = subprocess.run(cmd, cwd=str(root_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             self.assertEqual(p.returncode, 0, f"Command failed: {cmd}, stderr: {p.stderr}")
-            self.assertIn("hf2mlx", p.stdout)
+            self.assertIn("mlx-commander", p.stdout)
 
 
 if __name__ == "__main__":

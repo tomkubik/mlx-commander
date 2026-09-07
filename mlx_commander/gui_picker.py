@@ -37,7 +37,7 @@ def _compile_picker_at_runtime() -> Optional[str]:
         return None
 
     uid = os.getuid() if hasattr(os, "getuid") else "user"
-    tmp_bin = Path(tempfile.gettempdir()) / f"hf2mlx_picker_{uid}"
+    tmp_bin = Path(tempfile.gettempdir()) / f"mlx_commander_picker_{uid}"
 
     # Use cached runtime build if source hasn't changed
     if tmp_bin.exists() and os.access(tmp_bin, os.X_OK):
@@ -80,17 +80,26 @@ def run_runtime_compiled_picker(mode: str = "both", default_dir: Optional[str] =
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
             out = res.stdout.strip()
-            return _clean_path(out) if out else None
+            if not out:
+                return None
+            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            if not lines:
+                return None
+            if len(lines) == 1:
+                return _clean_path(lines[0])
+            cleaned = [_clean_path(l) for l in lines]
+            valid = [c for c in cleaned if c]
+            return "\n".join(valid) if valid else None
     except Exception:
         pass
 
     return None
 
 
-def pick_dataset_gui(default_dir: Optional[str] = None, prompt: str = "Select Dataset (File or Folder)") -> Optional[str]:
+def pick_dataset_gui(default_dir: Optional[str] = None, prompt: str = "Select Dataset (File, Files, or Folder)") -> Optional[str]:
     """
     Unified GUI dataset picker.
-    Allows selecting EITHER a dataset folder (save_to_disk) OR a dataset file (.parquet, .jsonl, .arrow, .csv).
+    Allows selecting a folder OR one or more dataset files (.parquet, .jsonl, .arrow, .csv).
     Compiled dynamically at runtime.
     """
     if is_macos():
@@ -104,11 +113,15 @@ def pick_dataset_gui(default_dir: Optional[str] = None, prompt: str = "Select Da
             dir_posix = str(Path(default_dir or os.getcwd()).resolve())
             script = f'''
             try
-                set thePath to choose folder with prompt "{prompt}" default location (POSIX file "{dir_posix}")
-                return POSIX path of thePath
+                set thePaths to choose file with prompt "{prompt}" default location (POSIX file "{dir_posix}") with multiple selections allowed
+                set posixList to ""
+                repeat with aFile in thePaths
+                    set posixList to posixList & (POSIX path of aFile) & linefeed
+                end repeat
+                return posixList
             on error
                 try
-                    set thePath to choose file with prompt "{prompt}" default location (POSIX file "{dir_posix}")
+                    set thePath to choose folder with prompt "{prompt}" default location (POSIX file "{dir_posix}")
                     return POSIX path of thePath
                 on error
                     return ""
@@ -119,7 +132,12 @@ def pick_dataset_gui(default_dir: Optional[str] = None, prompt: str = "Select Da
                 sub_res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
                 if sub_res.returncode == 0:
                     out = sub_res.stdout.strip()
-                    return _clean_path(out) if out else None
+                    lines = [l.strip() for l in out.splitlines() if l.strip()]
+                    if len(lines) == 1:
+                        return _clean_path(lines[0])
+                    cleaned = [_clean_path(l) for l in lines]
+                    valid = [c for c in cleaned if c]
+                    return "\n".join(valid) if valid else None
             except Exception:
                 pass
 

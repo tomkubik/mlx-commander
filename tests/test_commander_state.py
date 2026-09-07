@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hf2mlx.formats import MLXFormat
-from hf2mlx.tui.state import ActivePanel, CommanderState
+from mlx_commander.formats import MLXFormat
+from mlx_commander.tui.state import ActivePanel, CommanderState
 
 
 class TestCommanderState(unittest.TestCase):

@@ -2,10 +2,10 @@ import curses
 import unittest
 from unittest.mock import MagicMock, patch
 
-from hf2mlx.formats import MLXFormat
-from hf2mlx.tui.app import run_commander_tui
-from hf2mlx.tui.state import ActivePanel, CommanderState
-from hf2mlx.tui.widgets import (
+from mlx_commander.formats import MLXFormat
+from mlx_commander.tui.app import run_commander_tui
+from mlx_commander.tui.state import ActivePanel, CommanderState
+from mlx_commander.tui.widgets import (
     show_column_picker_dialog,
     show_help_dialog,
     show_results_dialog,
@@ -18,9 +18,9 @@ class TestCommanderUI(unittest.TestCase):
         self.mock_win = MagicMock()
         self.mock_win.getmaxyx.return_value = (30, 100)
 
-    @patch("hf2mlx.tui.app.curses.has_colors", return_value=False)
-    @patch("hf2mlx.tui.app.init_colors")
-    @patch("hf2mlx.tui.app.curses.curs_set")
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
     def test_run_commander_tui_quit_q(self, mock_curs, mock_colors, mock_has_colors):
         # Simulate pressing 'q' immediately to exit
         self.mock_win.getch.side_effect = [ord("q")]
@@ -29,9 +29,9 @@ class TestCommanderUI(unittest.TestCase):
         self.assertTrue(self.mock_win.erase.called)
         self.assertTrue(self.mock_win.refresh.called)
 
-    @patch("hf2mlx.tui.app.curses.has_colors", return_value=False)
-    @patch("hf2mlx.tui.app.init_colors")
-    @patch("hf2mlx.tui.app.curses.curs_set")
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
     def test_run_commander_tui_tab_and_arrow(self, mock_curs, mock_colors, mock_has_colors):
         # Press Tab (switches panel), Right arrow (cycles format), then 'q'
         self.mock_win.getch.side_effect = [
@@ -42,18 +42,18 @@ class TestCommanderUI(unittest.TestCase):
         res = run_commander_tui(self.mock_win)
         self.assertIsNone(res)
 
-    @patch("hf2mlx.tui.app.curses.has_colors", return_value=False)
-    @patch("hf2mlx.tui.app.init_colors")
-    @patch("hf2mlx.tui.app.curses.curs_set")
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
     def test_run_commander_tui_too_small_window(self, mock_curs, mock_colors, mock_has_colors):
         self.mock_win.getmaxyx.return_value = (10, 40)
         self.mock_win.getch.side_effect = [ord("q")]
         res = run_commander_tui(self.mock_win)
         self.assertIsNone(res)
 
-    @patch("hf2mlx.tui.app.curses.has_colors", return_value=False)
-    @patch("hf2mlx.tui.app.init_colors")
-    @patch("hf2mlx.tui.app.curses.curs_set")
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
     def test_run_commander_tui_help_dialog(self, mock_curs, mock_colors, mock_has_colors):
         # Press '?' (help), close help with Enter, then 'q' to quit
         self.mock_win.getch.side_effect = [
@@ -64,9 +64,9 @@ class TestCommanderUI(unittest.TestCase):
         res = run_commander_tui(self.mock_win)
         self.assertIsNone(res)
 
-    @patch("hf2mlx.tui.app.curses.has_colors", return_value=False)
-    @patch("hf2mlx.tui.app.init_colors")
-    @patch("hf2mlx.tui.app.curses.curs_set")
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
     def test_run_commander_tui_randomize_seed(self, mock_curs, mock_colors, mock_has_colors):
         # Press 'r' (randomize seed), then 'q'
         self.mock_win.getch.side_effect = [
@@ -137,7 +137,7 @@ class TestCommanderUI(unittest.TestCase):
 
     def test_show_results_dialog_esc(self):
         from pathlib import Path
-        from hf2mlx.converter import ConversionResult
+        from mlx_commander.converter import ConversionResult
         res = ConversionResult(
             output_dir=Path("/tmp/out"),
             format_type=MLXFormat.PROMPT_COMPLETION,
@@ -153,7 +153,7 @@ class TestCommanderUI(unittest.TestCase):
 
     def test_configure_escdelay(self):
         import os
-        from hf2mlx.tui.widgets import configure_escdelay
+        from mlx_commander.tui.widgets import configure_escdelay
 
         configure_escdelay(25)
         self.assertEqual(os.environ.get("ESCDELAY"), "25")

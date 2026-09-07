@@ -10,7 +10,7 @@ root_dir = Path(__file__).resolve().parent
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 
-from hf2mlx.cli import main
+from mlx_commander.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

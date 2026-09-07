@@ -3,7 +3,7 @@ Unit tests for dataset percentage splitting and random seed reproducibility.
 """
 
 import unittest
-from hf2mlx.splitter import (
+from mlx_commander.splitter import (
     SplitConfig,
     calculate_split_counts,
     generate_random_seed,

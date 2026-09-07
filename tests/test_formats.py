@@ -3,7 +3,7 @@ Unit tests for MLX format schemas and column mapping logic.
 """
 
 import unittest
-from hf2mlx.formats import (
+from mlx_commander.formats import (
     ColumnMapping,
     MLXFormat,
     auto_detect_mapping,
@@ -114,7 +114,7 @@ class TestFormats(unittest.TestCase):
 
 
     def test_parse_column_list(self):
-        from hf2mlx.formats import parse_column_list
+        from mlx_commander.formats import parse_column_list
         self.assertEqual(parse_column_list(None), [])
         self.assertEqual(parse_column_list(""), [])
         self.assertEqual(parse_column_list("prompt"), ["prompt"])
@@ -125,7 +125,7 @@ class TestFormats(unittest.TestCase):
         self.assertEqual(parse_column_list("a + b", available_columns=["a + b"]), ["a + b"])
 
     def test_get_column_value(self):
-        from hf2mlx.formats import get_column_value
+        from mlx_commander.formats import get_column_value
         rec = {"instruction": "Solve X", "input": "X=5", "empty": "", "none": None}
         self.assertEqual(get_column_value(rec, "instruction"), "Solve X")
         self.assertEqual(get_column_value(rec, "instruction + input"), "Solve X\n\nX=5")
