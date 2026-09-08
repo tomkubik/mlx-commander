@@ -617,7 +617,10 @@ def draw_field(
     arrow = " ▾" if has_dropdown else ""
     max_len = val_width - len(arrow) - 2
     if len(disp_val) > max_len:
-        disp_val = disp_val[: max_len - 1] + "…"
+        if "/" in disp_val or "\\" in disp_val:
+            disp_val = "…" + disp_val[-(max_len - 1):]
+        else:
+            disp_val = disp_val[: max_len - 1] + "…"
 
     pad = " " * max(0, max_len - len(disp_val))
     box_str = f"[ {disp_val}{pad}{arrow} ]"

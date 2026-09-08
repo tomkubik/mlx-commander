@@ -43,7 +43,10 @@ python3 run.py
 # Or as a Python package module:
 python3 -m mlx_commander
 
-# Or via zero-install uvx:
+# Or zero-install directly via uvx from GitHub:
+uvx --from git+https://github.com/tomkubik/mlx-commander.git mlx-commander
+
+# Or via PyPI (once published):
 uvx mlx-commander
 ```
 
@@ -246,7 +249,7 @@ MLX-Commander includes a built-in MCP server that works over `stdio`.
   "mcpServers": {
     "mlx-commander": {
       "command": "uvx",
-      "args": ["--with", "mcp", "mlx-commander", "--mcp"]
+      "args": ["--from", "git+https://github.com/tomkubik/mlx-commander.git", "--with", "mcp", "mlx-commander", "--mcp"]
     }
   }
 }

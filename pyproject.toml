@@ -1,15 +1,16 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "mlx-commander"
 version = "0.2.0"
-description = "CLI & TUI tool to convert Hugging Face datasets into Apple MLX dataset formats"
+description = "Convert Hugging Face datasets into Apple MLX formats, configure parameters, and run training and fine-tuning via interactive TUI and CLI"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.9"
 authors = [
-    { name = "MLX Dataset Converter Team" }
+    { name = "Tom Kubik" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -47,5 +48,16 @@ all = [
 [project.scripts]
 mlx-commander = "mlx_commander.cli:main"
 
-[tool.setuptools.packages.find]
-include = ["mlx_commander*"]
+[project.urls]
+Homepage = "https://github.com/tomkubik/mlx-commander"
+Repository = "https://github.com/tomkubik/mlx-commander.git"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mlx_commander"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/mlx_commander",
+    "/README.md",
+    "/LICENSE",
+]

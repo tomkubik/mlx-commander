@@ -582,6 +582,96 @@ class TestCommanderUI(unittest.TestCase):
         self.assertEqual(state.left_focus_idx, 1)
 
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_output_field_and_convert_button_no_row_collision(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify Output field and Convert Dataset button render on separate rows across formats."""
+        for fmt in [MLXFormat.PROMPT_COMPLETION, MLXFormat.DPO, MLXFormat.TEXT, MLXFormat.CHAT]:
+            self.mock_win.reset_mock()
+            self.mock_win.getmaxyx.return_value = (24, 80)
+            state = CommanderState()
+            state.target_format = fmt
+            self.mock_win.getch.side_effect = [ord("q")]
+
+            run_commander_tui(self.mock_win, initial_state=state)
+
+            output_y = None
+            convert_y = None
+            for call_args in self.mock_win.addstr.call_args_list:
+                args = call_args[0]
+                if len(args) >= 3 and isinstance(args[2], str):
+                    y, x, text = args[0], args[1], args[2]
+                    if "Output:" in text:
+                        output_y = y
+                    elif "Convert Dataset" in text:
+                        convert_y = y
+
+            self.assertIsNotNone(output_y, f"Output label not found for format {fmt}")
+            self.assertIsNotNone(convert_y, f"Convert button not found for format {fmt}")
+            self.assertNotEqual(
+                output_y,
+                convert_y,
+                f"Collision: Output field and Convert button share row {output_y} for format {fmt}"
+            )
+            self.assertEqual(
+                convert_y,
+                output_y + 1,
+                f"Convert button row {convert_y} should be exactly output_y + 1 ({output_y + 1}) for format {fmt}"
+            )
+
+
+    def test_draw_field_path_truncation(self):
+        """Verify draw_field truncates paths from the front so the directory/filename is visible."""
+        from mlx_commander.tui.widgets import draw_field
+
+        self.mock_win.reset_mock()
+        long_path = "/Users/tomkubik/Downloads/Projects/toMLXfromHF – dataset converter/mlx_dataset"
+        draw_field(self.mock_win, 5, 2, "Output", long_path, val_width=24, has_dropdown=True)
+
+        box_str = None
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str) and args[2].startswith("["):
+                box_str = args[2]
+
+        self.assertIsNotNone(box_str)
+        self.assertIn("mlx_dataset", box_str)
+        self.assertIn("…", box_str)
+
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_splits_fields_right_brackets_visible(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify Train, Valid, and Test fields retain their right-hand brackets without being overwritten."""
+        for term_w in [130, 100]:
+            self.mock_win.reset_mock()
+            self.mock_win.getmaxyx.return_value = (30, term_w)
+            state = CommanderState()
+            self.mock_win.getch.side_effect = [ord("q")]
+
+            run_commander_tui(self.mock_win, initial_state=state)
+
+            # Find row where splits are drawn
+            splits_y = 8 + len(state.get_mapping_fields_for_format())
+            row_chars = [" "] * term_w
+
+            for call_args in self.mock_win.addstr.call_args_list:
+                args = call_args[0]
+                if len(args) >= 3 and isinstance(args[2], str):
+                    y, x, text = args[0], args[1], args[2]
+                    if y == splits_y:
+                        for i, ch in enumerate(text):
+                            if x + i < term_w:
+                                row_chars[x + i] = ch
+
+            rendered_row = "".join(row_chars)
+            self.assertIn("Train: [ 80%  ]", rendered_row, f"Train right bracket missing on width {term_w}: {rendered_row}")
+            self.assertIn("Valid: [ 10%  ]", rendered_row, f"Valid right bracket missing on width {term_w}: {rendered_row}")
+            self.assertIn("Test: [ 10%  ]", rendered_row, f"Test right bracket missing on width {term_w}: {rendered_row}")
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -314,8 +314,9 @@ def run_commander_tui(
 
         # Tier 1: Top configuration panels
         mapping_fields = state.get_mapping_fields_for_format()
-        needed_top_h = max(13, 11 + len(mapping_fields))
-        max_possible_top = max(11, max_y - 10)
+        min_top_h = 12 + len(mapping_fields)
+        needed_top_h = max(14, min_top_h)
+        max_possible_top = max(min_top_h, max_y - 10)
         panel_h = min(needed_top_h, max_possible_top)
 
         # Tier 2: Middle visual mapping pipeline
@@ -474,10 +475,19 @@ def run_commander_tui(
         valid_focus = is_right and state.right_focus_idx == 5 + len(mapping_fields)
         test_focus = is_right and state.right_focus_idx == 6 + len(mapping_fields)
 
-        safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        draw_field(stdscr, splits_start_y, left_w + 14, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=6)
-        draw_field(stdscr, splits_start_y, left_w + 27, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=6)
-        draw_field(stdscr, splits_start_y, left_w + 40, "Test", f"{state.test_pct:.0f}%", is_focused=test_focus, val_width=6)
+        if right_w >= 62:
+            safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            train_x = left_w + 14
+            valid_x = left_w + 30
+            test_x = left_w + 46
+        else:
+            train_x = left_w + 2
+            valid_x = left_w + 18
+            test_x = left_w + 34
+
+        draw_field(stdscr, splits_start_y, train_x, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=6)
+        draw_field(stdscr, splits_start_y, valid_x, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=6)
+        draw_field(stdscr, splits_start_y, test_x, "Test", f"{state.test_pct:.0f}%", is_focused=test_focus, val_width=6)
 
         # Seed & Randomize
         seed_y = splits_start_y + 1
@@ -489,11 +499,11 @@ def run_commander_tui(
         # Output Folder
         out_y = seed_y + 1
         out_focus = is_right and state.right_focus_idx == 9 + len(mapping_fields)
-        draw_field(stdscr, out_y, left_w + 2, "Output", state.output_dir, is_focused=out_focus, val_width=min(24, right_w - 14))
+        draw_field(stdscr, out_y, left_w + 2, "Output", state.output_dir, is_focused=out_focus, val_width=min(24, right_w - 14), has_dropdown=True)
 
         # Convert Action Button
         conv_focus = is_right and state.right_focus_idx == 10 + len(mapping_fields)
-        btn_y = min(panel_h - 1, out_y + 1)
+        btn_y = out_y + 1
         draw_button(stdscr, btn_y, left_w + 4, "Convert Dataset (F5)", is_focused=conv_focus)
 
         # ----------------------------------------------------
