@@ -49,8 +49,8 @@ all = [
 mlx_commander = "mlx_commander.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/tomkubik/mlx_commander"
-Repository = "https://github.com/tomkubik/mlx_commander.git"
+Homepage = "https://github.com/tomkubik/mlx-commander"
+Repository = "https://github.com/tomkubik/mlx-commander.git"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mlx_commander"]
