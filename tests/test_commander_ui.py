@@ -648,7 +648,7 @@ class TestCommanderUI(unittest.TestCase):
     @patch("mlx_commander.tui.app.init_colors")
     @patch("mlx_commander.tui.app.curses.curs_set")
     def test_splits_fields_right_brackets_visible(self, mock_curs, mock_colors, mock_has_colors):
-        """Verify Train, Valid, and Test fields retain their right-hand brackets without being overwritten."""
+        """Verify Train, Valid, and Test fields retain their right-hand brackets on their respective rows."""
         for term_w in [130, 100]:
             self.mock_win.reset_mock()
             self.mock_win.getmaxyx.return_value = (30, term_w)
@@ -657,23 +657,116 @@ class TestCommanderUI(unittest.TestCase):
 
             run_commander_tui(self.mock_win, initial_state=state)
 
-            # Find row where splits are drawn
             splits_y = 8 + len(state.get_mapping_fields_for_format())
-            row_chars = [" "] * term_w
 
+            def get_row_str(target_y):
+                row_chars = [" "] * term_w
+                for call_args in self.mock_win.addstr.call_args_list:
+                    args = call_args[0]
+                    if len(args) >= 3 and isinstance(args[2], str):
+                        y, x, text = args[0], args[1], args[2]
+                        if y == target_y:
+                            for i, ch in enumerate(text):
+                                if x + i < term_w:
+                                    row_chars[x + i] = ch
+                return "".join(row_chars)
+
+            train_row = get_row_str(splits_y)
+            valid_row = get_row_str(splits_y + 1)
+            test_row = get_row_str(splits_y + 2)
+
+            self.assertIn("Dataset split:", train_row, f"Dataset split label missing on row {splits_y}: {train_row}")
+            self.assertIn("Train:", train_row)
+            self.assertIn("[ 80%  ]", train_row, f"Train right bracket missing on width {term_w}: {train_row}")
+            self.assertIn("Valid:", valid_row)
+            self.assertIn("[ 10%  ]", valid_row, f"Valid right bracket missing on width {term_w}: {valid_row}")
+            self.assertIn("Test:", test_row)
+            self.assertIn("[ 10%  ]", test_row, f"Test right bracket missing on width {term_w}: {test_row}")
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_splits_layout_vertical_alignment_and_white_labels(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify:
+        1. 'Dataset split:' label is aligned to left (at left_w + 2).
+        2. 'Train' starts on the same line as 'Dataset split'.
+        3. 'Valid' and 'Test' are on consecutive lines below.
+        4. Labels for 'Train', 'Valid', and 'Test' are in white font, unbolded.
+        5. 'Train', 'Valid', and 'Test' input fields are aligned to the right.
+        6. 'Train', 'Valid', and 'Test' labels are aligned to left with an indent.
+        """
+        term_w = 120
+        self.mock_win.reset_mock()
+        self.mock_win.getmaxyx.return_value = (30, term_w)
+        left_w = term_w // 2  # 60
+        right_w = term_w - left_w  # 60
+        right_edge = left_w + right_w - 3  # 117
+
+        state = CommanderState()
+        self.mock_win.getch.side_effect = [ord("q")]
+
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        splits_y = 8 + len(state.get_mapping_fields_for_format())
+
+        # Check 'Dataset split:' label position & attribute
+        ds_split_found = False
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str):
+                y, x, text = args[0], args[1], args[2]
+                if y == splits_y and "Dataset split:" in text:
+                    self.assertEqual(x, left_w + 2, "Dataset split label must be aligned to left (left_w + 2)")
+                    ds_split_found = True
+        self.assertTrue(ds_split_found, "Dataset split label not found")
+
+        # Track rows, coordinates, attributes, and input box endpoints
+        splits_info = {}
+        for split_name, expected_y in [("Train", splits_y), ("Valid", splits_y + 1), ("Test", splits_y + 2)]:
+            lbl_x = None
+            lbl_attr = None
+            box_end_x = None
             for call_args in self.mock_win.addstr.call_args_list:
                 args = call_args[0]
                 if len(args) >= 3 and isinstance(args[2], str):
                     y, x, text = args[0], args[1], args[2]
-                    if y == splits_y:
-                        for i, ch in enumerate(text):
-                            if x + i < term_w:
-                                row_chars[x + i] = ch
+                    attr = args[3] if len(args) >= 4 else 0
+                    if y == expected_y:
+                        if f"{split_name}:" in text:
+                            lbl_x = x
+                            lbl_attr = attr
+                        elif text.startswith("[") and "%" in text:
+                            box_end_x = x + len(text) - 1
+            splits_info[split_name] = {"x": lbl_x, "attr": lbl_attr, "box_end": box_end_x}
 
-            rendered_row = "".join(row_chars)
-            self.assertIn("Train: [ 80%  ]", rendered_row, f"Train right bracket missing on width {term_w}: {rendered_row}")
-            self.assertIn("Valid: [ 10%  ]", rendered_row, f"Valid right bracket missing on width {term_w}: {rendered_row}")
-            self.assertIn("Test: [ 10%  ]", rendered_row, f"Test right bracket missing on width {term_w}: {rendered_row}")
+        # Verify Train, Valid, Test labels are indented and aligned with each other
+        train_x = splits_info["Train"]["x"]
+        valid_x = splits_info["Valid"]["x"]
+        test_x = splits_info["Test"]["x"]
+
+        self.assertIsNotNone(train_x)
+        self.assertGreater(train_x, left_w + 2, "Train label must be indented on the left side")
+        self.assertEqual(valid_x, train_x, "Valid label must align with Train label")
+        self.assertEqual(test_x, train_x, "Test label must align with Train label")
+
+        # Verify all three input fields are right-aligned to right_edge
+        for name in ["Train", "Valid", "Test"]:
+            self.assertEqual(
+                splits_info[name]["box_end"],
+                right_edge,
+                f"{name} input field must end at right_edge ({right_edge})",
+            )
+
+        # Verify labels are unbolded (no curses.A_BOLD)
+        for name in ["Train", "Valid", "Test"]:
+            attr = splits_info[name]["attr"]
+            self.assertIsNotNone(attr, f"{name} label attribute should be recorded")
+            self.assertEqual(
+                attr & curses.A_BOLD,
+                0,
+                f"{name} label must be unbolded",
+            )
+
 
 
     def test_draw_field_right_edge_alignment(self):

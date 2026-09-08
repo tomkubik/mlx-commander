@@ -283,10 +283,10 @@ def run_commander_tui(
         safe_addstr(stdscr, 0, 0, " " * max_x, hdr_attr)
         if ThemeMode.is_norton(state.theme_mode):
             safe_addstr(stdscr, 0, 2, "MLX Commander  ::  Norton Commander Classic Mode", hdr_attr)
-            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9/9/t: Scheme | F10: Exit]" if max_x >= 96 else "[F1: Help | F9/t: Scheme]"
+            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9: Scheme | F10: Exit]" if max_x >= 92 else "[F1: Help | F9: Scheme]"
         else:
             safe_addstr(stdscr, 0, 2, "MLX Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
-            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9/9/t: Scheme | F10: Exit]" if max_x >= 98 else "[F1: Help | F10: Exit]"
+            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9: Scheme | F10: Exit]" if max_x >= 92 else "[F1: Help | F10: Exit]"
         safe_addstr(stdscr, 0, max(2, max_x - len(hint_str) - 2), hint_str, hdr_attr)
 
         # ----------------------------------------------------
@@ -297,8 +297,8 @@ def run_commander_tui(
 
         # Tier 1: Top configuration panels
         mapping_fields = state.get_mapping_fields_for_format()
-        min_top_h = 12 + len(mapping_fields)
-        needed_top_h = max(14, min_top_h)
+        min_top_h = 14 + len(mapping_fields)
+        needed_top_h = max(16, min_top_h)
         max_possible_top = max(min_top_h, max_y - 10)
         panel_h = min(needed_top_h, max_possible_top)
 
@@ -465,25 +465,58 @@ def run_commander_tui(
         valid_focus = is_right and state.right_focus_idx == 5 + len(mapping_fields)
         test_focus = is_right and state.right_focus_idx == 6 + len(mapping_fields)
 
-        # Splits layout: Train (15), Valid (15), Test (14) = 46 cols total
-        if right_w >= 62:
-            safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-            test_x = right_edge - 14 + 1
-            valid_x = test_x - 16
-            train_x = valid_x - 16
-        else:
-            train_x = max(left_w + 2, right_edge - 46 + 1)
-            valid_x = train_x + 16
-            test_x = valid_x + 16
-            if train_x >= left_w + 14:
-                safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        # Splits layout:
+        # Line 1: "Dataset split:" at left_w + 2, "Train" field right-aligned
+        # Line 2: "Valid" field right-aligned
+        # Line 3: "Test" field right-aligned
+        # Labels for Train, Valid, Test are white font, unbolded.
+        safe_addstr(
+            stdscr,
+            splits_start_y,
+            left_w + 2,
+            "Dataset split:",
+            (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD,
+        )
 
-        draw_field(stdscr, splits_start_y, train_x, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=6)
-        draw_field(stdscr, splits_start_y, valid_x, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=6)
-        draw_field(stdscr, splits_start_y, test_x, "Test", f"{state.test_pct:.0f}%", is_focused=test_focus, val_width=6)
+        split_label_x = min(left_w + 18, right_edge - 16)
+        white_unbold = get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0
+
+        draw_field(
+            stdscr,
+            splits_start_y,
+            split_label_x,
+            "Train",
+            f"{state.train_pct:.0f}%",
+            is_focused=train_focus,
+            val_width=6,
+            right_edge=right_edge,
+            lbl_attr=white_unbold,
+        )
+        draw_field(
+            stdscr,
+            splits_start_y + 1,
+            split_label_x,
+            "Valid",
+            f"{state.valid_pct:.0f}%",
+            is_focused=valid_focus,
+            val_width=6,
+            right_edge=right_edge,
+            lbl_attr=white_unbold,
+        )
+        draw_field(
+            stdscr,
+            splits_start_y + 2,
+            split_label_x,
+            "Test",
+            f"{state.test_pct:.0f}%",
+            is_focused=test_focus,
+            val_width=6,
+            right_edge=right_edge,
+            lbl_attr=white_unbold,
+        )
 
         # Seed & Randomize
-        seed_y = splits_start_y + 1
+        seed_y = splits_start_y + 3
         seed_focus = is_right and state.right_focus_idx == 7 + len(mapping_fields)
         rand_focus = is_right and state.right_focus_idx == 8 + len(mapping_fields)
 
@@ -615,13 +648,13 @@ def run_commander_tui(
         footer_y = max_y - 1
         if ThemeMode.is_norton(state.theme_mode):
             # Classic Norton Commander Function Key Bar:
-            # 1 Help  2 Open  3 Output  5 Convert  9 Scheme  10 Exit
+            # 1 Help  2 Open  3 Output  5 Convert  F9 Scheme  10 Exit
             fn_items = [
                 ("1", "Help"),
                 ("2", "Open"),
                 ("3", "Output"),
                 ("5", "Convert"),
-                ("9", "Scheme"),
+                ("F9", "Scheme"),
                 ("10", "Exit"),
             ]
             safe_addstr(stdscr, footer_y, 0, " " * max_x, get_color(COLOR_PANEL_BG))

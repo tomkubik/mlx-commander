@@ -608,16 +608,22 @@ def draw_field(
     has_dropdown: bool = False,
     right_edge: Optional[int] = None,
     field_x: Optional[int] = None,
+    lbl_attr: Optional[int] = None,
 ) -> None:
     """Draw a labeled form field with deep blue background and active bright white font.
 
     If right_edge is specified, aligns the field box so its right bracket is at right_edge,
     while keeping the label aligned at x (the left side).
     If field_x is specified, renders the box starting explicitly at field_x.
+    If lbl_attr is specified, overrides the default bold gray label styling.
     """
     lbl = f"{label}: "
-    lbl_attr = (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
-    safe_addstr(win, y, x, lbl, lbl_attr)
+    used_lbl_attr = (
+        lbl_attr
+        if lbl_attr is not None
+        else ((get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+    )
+    safe_addstr(win, y, x, lbl, used_lbl_attr)
 
     if right_edge is not None and field_x is None:
         avail_for_box = right_edge - (x + len(lbl)) + 1
