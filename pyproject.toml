@@ -46,6 +46,7 @@ all = [
 ]
 
 [project.scripts]
+mlx_commander = "mlx_commander.cli:main"
 mlx-commander = "mlx_commander.cli:main"
 
 [project.urls]
@@ -58,6 +59,11 @@ packages = ["mlx_commander"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/mlx_commander",
+    "/mlx_commander.py",
+    "/mlx-commander.py",
+    "/run.py",
     "/README.md",
     "/LICENSE",
+    "/requirements.txt",
+    "/smithery.yaml",
 ]

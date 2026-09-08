@@ -38,7 +38,8 @@ Launch the interactive dashboard using any of these equivalent commands:
 
 ```bash
 # Recommended for local repository execution (Primary):
-python3 mlx-commander.py
+python3 mlx_commander.py
+# (python3 mlx-commander.py is also supported)
 
 # Or via secondary compatibility alias:
 python3 run.py
@@ -47,18 +48,18 @@ python3 run.py
 python3 -m mlx_commander
 
 # Or zero-install directly via uvx from GitHub:
-uvx --from git+https://github.com/tomkubik/mlx-commander.git mlx-commander
+uvx --from git+https://github.com/tomkubik/mlx-commander.git mlx_commander
 
 # Or via PyPI (once published):
-uvx mlx-commander
+uvx mlx_commander
 ```
 
 You can also pass arguments directly (e.g. pre-loading a dataset or multiple files):
 ```bash
-python3 mlx-commander.py -d /path/to/my_hf_dataset
+python3 mlx_commander.py -d /path/to/my_hf_dataset
 # Or combine multiple files:
-python3 mlx-commander.py -d train.jsonl test.jsonl
-# (python3 run.py also accepts all the same arguments)
+python3 mlx_commander.py -d train.jsonl test.jsonl
+# (python3 mlx-commander.py and python3 run.py accept all the same arguments)
 ```
 
 ### 2. Line-by-Line Wizard Mode

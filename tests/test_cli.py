@@ -168,6 +168,8 @@ class TestCLI(unittest.TestCase):
         python_bin = sys.executable
 
         cmds = [
+            [python_bin, "mlx_commander.py", "--version"],
+            [python_bin, "mlx-commander.py", "--version"],
             [python_bin, "run.py", "--version"],
             [python_bin, "-m", "mlx_commander", "--version"],
         ]
