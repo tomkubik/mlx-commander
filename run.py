@@ -2,7 +2,7 @@
 """Secondary / compatibility launcher for MLX-Commander.
 
 Primary launcher:
-    python3 mlx_commander.py
+    python3 mlx-commander.py
 
 This script is retained as an alias for backward compatibility:
     python3 run.py

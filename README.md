@@ -38,7 +38,7 @@ Launch the interactive dashboard using any of these equivalent commands:
 
 ```bash
 # Recommended for local repository execution (Primary):
-python3 mlx_commander.py
+python3 mlx-commander.py
 
 # Or via secondary compatibility alias:
 python3 run.py
@@ -55,9 +55,9 @@ uvx mlx-commander
 
 You can also pass arguments directly (e.g. pre-loading a dataset or multiple files):
 ```bash
-python3 mlx_commander.py -d /path/to/my_hf_dataset
+python3 mlx-commander.py -d /path/to/my_hf_dataset
 # Or combine multiple files:
-python3 mlx_commander.py -d train.jsonl test.jsonl
+python3 mlx-commander.py -d train.jsonl test.jsonl
 # (python3 run.py also accepts all the same arguments)
 ```
 
@@ -66,7 +66,7 @@ python3 mlx_commander.py -d train.jsonl test.jsonl
 For SSH sessions or non-curses environments:
 
 ```bash
-python3 mlx_commander.py --wizard
+python3 mlx-commander.py --wizard
 ```
 
 ### 3. Direct Command-Line Conversion (Automated / Headless)
@@ -74,7 +74,7 @@ python3 mlx_commander.py --wizard
 You can pass all options via flags for direct scripted conversions:
 
 ```bash
-python3 mlx_commander.py \
+python3 mlx-commander.py \
   --dataset /path/to/my_hf_dataset \
   --format prompt_completion \
   --prompt-col instruction \

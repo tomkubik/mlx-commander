@@ -2,7 +2,7 @@
 """Primary launcher for MLX-Commander.
 
 Run directly with Python:
-    python3 mlx_commander.py
+    python3 mlx-commander.py
 """
 import os
 import sys
