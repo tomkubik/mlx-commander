@@ -37,7 +37,10 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 Launch the interactive dashboard using any of these equivalent commands:
 
 ```bash
-# Recommended for local repository execution:
+# Recommended for local repository execution (Primary):
+python3 mlx_commander.py
+
+# Or via secondary compatibility alias:
 python3 run.py
 
 # Or as a Python package module:
@@ -52,9 +55,10 @@ uvx mlx-commander
 
 You can also pass arguments directly (e.g. pre-loading a dataset or multiple files):
 ```bash
-python3 run.py -d /path/to/my_hf_dataset
+python3 mlx_commander.py -d /path/to/my_hf_dataset
 # Or combine multiple files:
-python3 run.py -d train.jsonl test.jsonl
+python3 mlx_commander.py -d train.jsonl test.jsonl
+# (python3 run.py also accepts all the same arguments)
 ```
 
 ### 2. Line-by-Line Wizard Mode
@@ -62,7 +66,7 @@ python3 run.py -d train.jsonl test.jsonl
 For SSH sessions or non-curses environments:
 
 ```bash
-./mlx-commander --wizard
+python3 mlx_commander.py --wizard
 ```
 
 ### 3. Direct Command-Line Conversion (Automated / Headless)
@@ -70,7 +74,7 @@ For SSH sessions or non-curses environments:
 You can pass all options via flags for direct scripted conversions:
 
 ```bash
-./mlx-commander \
+python3 mlx_commander.py \
   --dataset /path/to/my_hf_dataset \
   --format prompt_completion \
   --prompt-col instruction \
