@@ -64,4 +64,5 @@ include = [
     "/LICENSE",
     "/requirements.txt",
     "/smithery.yaml",
+    "/docs",
 ]

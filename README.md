@@ -4,6 +4,10 @@ A fast, persistent dual-panel TUI (Norton Commander style) & CLI converter for p
 
 Built entirely with Python's standard library `curses` with zero mandatory dependencies and zero pre-compiled binaries.
 
+![Orthodox TUI which makes MLX defaults explicit](docs/images/screenshot1.png)
+
+*Orthodox TUI which makes MLX defaults explicit*
+
 ---
 
 ## 🌟 Key Features
@@ -27,6 +31,10 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 - **Deterministic Splits & Random Seed**: Customizable Train / Validation / Test percentages with 100% reproducible shuffling via random seed.
 - **Ready-to-Use `mlx_lm.lora` Command**: Generates the exact training command ready to copy-paste.
 - **CLI Wizard & Headless Modes**: Run line-by-line via `--wizard` or fully automated via headless CLI flags.
+
+![Inspired by Norton Commander, with a classic color scheme available in TUI](docs/images/screenshot2.png)
+
+*Inspired by Norton Commander, with a classic color scheme available in TUI*
 
 ---
 
