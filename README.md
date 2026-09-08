@@ -1,4 +1,4 @@
-# MLX Commander
+# MLX Commander 🚀
 
 A fast, persistent dual-panel TUI (Norton Commander style) & CLI converter for preparing Hugging Face datasets into Apple Silicon MLX fine-tuning formats (`mlx-lm`).
 
@@ -6,7 +6,7 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 
 ---
 
-## Key Features
+## 🌟 Key Features
 
 - **Persistent Multi-Panel TUI (Norton Commander style)**: Full keyboard navigation (`Tab` to switch panels, `↑`/`↓` to navigate, `Enter` to edit/open dropdowns, `F2` for Finder, `F5` to convert).
 - **AI Agent Skill & TUI Pre-Population**: Coding agents (Antigravity, Claude, Cursor) can inspect dataset schemas, pre-populate format, column mappings, and splits, and launch the TUI for split-second visual confirmation.
@@ -30,7 +30,7 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 
 ---
 
-## Quick Start
+## 📦 Quick Start
 
 ### 1. Launch MLX Commander (Default)
 
@@ -88,7 +88,7 @@ python3 mlx_commander.py \
 
 ---
 
-## Command Line Reference
+## 🖥️ Command Line Reference
 
 ```
 usage: mlx_commander [-h] [-v] [-d DATASET [DATASET ...]]
@@ -134,7 +134,7 @@ usage: mlx_commander [-h] [-v] [-d DATASET [DATASET ...]]
 
 ---
 
-## AI Agent Integration & MCP Support
+## 🤖 AI Agent Integration & MCP Support
 
 MLX Commander is designed for the modern AI agent era (**Antigravity**, **Claude Desktop**, **Cursor**, **Zed**, **Cline**). 
 
@@ -142,7 +142,7 @@ Instead of an agent interrogating users with 10 sequential chat prompts or guess
 
 The user gets a 3-second tactile review with live JSONL preview in the Norton Commander TUI, presses **[F5 Convert]**, and hands control back to the agent with a machine-readable manifest.
 
-### The End-to-End Workflow
+### 🔄 The End-to-End Workflow
 
 ```mermaid
 sequenceDiagram
@@ -293,7 +293,7 @@ AI agents that support skill discovery (like **Antigravity**) automatically read
 
 ---
 
-## Step-by-Step Wizard Walkthrough
+## 🛠️ Step-by-Step Wizard Walkthrough
 
 1. **Step 1: Dataset Source**: Select your dataset folder or file on your drive. The tool validates the file, inspects column names, row counts, and existing splits.
 2. **Step 2: MLX Format**: Choose your target format (`Text`, `Chat / Messages`, `Prompt & Completion`, `DPO / Preference`).
@@ -304,7 +304,7 @@ AI agents that support skill discovery (like **Antigravity**) automatically read
 
 ---
 
-## Running Fine-Tuning with Apple MLX
+## 🚀 Running Fine-Tuning with Apple MLX
 
 Once your dataset is converted, fine-tune an LLM on Apple Silicon with `mlx-lm`:
 
@@ -320,7 +320,7 @@ mlx_lm.lora \
 
 ---
 
-## Running Unit Tests
+## 🧪 Running Unit Tests
 
 Run the test suite with Python's built-in `unittest`:
 
