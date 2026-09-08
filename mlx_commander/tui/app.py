@@ -226,31 +226,11 @@ def run_commander_tui(
     curses.curs_set(0)
     stdscr.keypad(True)
 
-    if not state.loaded_dataset:
-        initial_path = default_dataset_path or (state.dataset_path if state.dataset_path else os.getcwd())
-        # Attempt to auto-load if valid dataset files are in initial directory
+    target_dataset_path = default_dataset_path or state.dataset_path
+    if not state.loaded_dataset and target_dataset_path:
         try:
-            p = Path(initial_path).resolve()
-            has_dataset = (
-                p.is_file()
-                or any(p.glob("*.parquet"))
-                or any(p.glob("*.jsonl"))
-                or any(p.glob("*.arrow"))
-                or any(p.glob("*.csv"))
-                or any(p.glob("*.tsv"))
-                or any(p.glob("*.txt"))
-                or any(p.glob("*.text"))
-                or any(p.glob("*.sqlite"))
-                or any(p.glob("*.db"))
-                or any(p.glob("*.duckdb"))
-                or any(p.glob("*.ddb"))
-                or any(p.glob("*.lance"))
-                or p.name.endswith(".lance")
-                or any(p.glob("*.tar"))
-                or any(p.glob("*.tar.gz"))
-                or any(p.glob("dataset_info.json"))
-            )
-            if has_dataset:
+            p = Path(target_dataset_path).resolve()
+            if p.exists():
                 loaded = state.load_dataset(str(p))
                 if not loaded and state.last_missing_dependency:
                     if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
@@ -261,14 +241,17 @@ def run_commander_tui(
                     base = p if p.is_dir() else p.parent
                     state.output_dir = str(base / "mlx_dataset")
         except Exception:
-            state.dataset_path = initial_path
+            state.dataset_path = target_dataset_path
             if not state.has_custom_output_dir:
                 try:
-                    p = Path(initial_path).resolve()
+                    p = Path(target_dataset_path).resolve()
                     base = p if p.is_dir() else p.parent
                     state.output_dir = str(base / "mlx_dataset")
                 except Exception:
                     state.output_dir = str(Path.cwd() / "mlx_dataset")
+    elif not state.loaded_dataset:
+        if not state.has_custom_output_dir and not state.output_dir:
+            state.output_dir = str(Path.cwd() / "mlx_dataset")
 
     conversion_result: Optional[ConversionResult] = None
     formats_list = [
@@ -558,7 +541,10 @@ def run_commander_tui(
             subtitle=f"{state.target_format.value.upper()}",
         )
 
-        if state.preview_error:
+        if not state.loaded_dataset:
+            safe_addstr(stdscr, preview_y + 1, 3, "(No dataset selected)", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, preview_y + 2, 3, "Use Finder (F2) or Change Path in Tab 1 to select a dataset.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
+        elif state.preview_error:
             safe_addstr(stdscr, preview_y + 1, 3, f"[!] {state.preview_error}", get_color(5) | curses.A_BOLD)
             safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
         elif not state.preview_cache:

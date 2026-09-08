@@ -264,7 +264,7 @@ class CommanderState:
         self.preview_error = None
 
         if not self.loaded_dataset or not self.loaded_dataset.sample_records:
-            self.preview_cache = ["(No dataset loaded)"]
+            self.preview_cache = []
             return
 
         samples = self.loaded_dataset.sample_records[:3]

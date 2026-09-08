@@ -785,6 +785,35 @@ class TestCommanderUI(unittest.TestCase):
         )
 
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_initial_tui_no_dataset_empty_preview(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify that starting MLX Commander without a dataset shows (No dataset selected) and no record content."""
+        self.mock_win.reset_mock()
+        self.mock_win.getmaxyx.return_value = (30, 100)
+        self.mock_win.getch.side_effect = [ord("q")]
+
+        # Run without default_dataset_path and without initial_state (simulating python3 mlx_commander.py)
+        run_commander_tui(self.mock_win)
+
+        all_rendered_text = []
+        no_ds_found = False
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str):
+                text = args[2]
+                all_rendered_text.append(text)
+                if "(No dataset selected)" in text:
+                    no_ds_found = True
+
+        self.assertTrue(no_ds_found, "Live preview panel must show '(No dataset selected)' when no dataset is provided")
+
+        full_dump = " ".join(all_rendered_text)
+        self.assertNotIn("datasets>=2.14.0", full_dump, "Must not auto-load requirements.txt or current directory")
+        self.assertNotIn("pyarrow>=12.0.0", full_dump, "Must not auto-load requirements.txt or current directory")
+
+
 if __name__ == "__main__":
     unittest.main()
 
