@@ -1023,7 +1023,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
         ("F2", "Open native macOS Finder upload / dataset picker"),
         ("F3", "Open macOS Finder to choose output destination folder"),
         ("F5", "Run conversion and write train/valid/test JSONL files"),
-        ("F9 / 9 / t", "Toggle color scheme (Norton Commander <-> Modern)"),
+        ("F9", "Toggle color scheme (Norton Commander <-> Modern)"),
         ("r / R", "Randomize split seed"),
         ("? / F1", "Show this help screen"),
         ("F10 / q / Esc", "Exit MLX Commander"),

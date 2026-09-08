@@ -758,7 +758,7 @@ def run_commander_tui(
             elif key in (ord("r"), ord("R")):
                 state.randomize_seed()
 
-            elif key in (curses.KEY_F9, ord("9"), ord("t"), ord("T")):
+            elif key == curses.KEY_F9:
                 state.toggle_theme()
                 init_colors(state.theme_mode)
                 if ThemeMode.is_norton(state.theme_mode):

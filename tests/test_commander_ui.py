@@ -469,21 +469,23 @@ class TestCommanderUI(unittest.TestCase):
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
     @patch("mlx_commander.tui.app.init_colors")
     @patch("mlx_commander.tui.app.curses.curs_set")
-    def test_norton_color_scheme_toggle_f9_and_9(self, mock_curs, mock_colors, mock_has_colors):
+    def test_norton_color_scheme_toggle_f9_only(self, mock_curs, mock_colors, mock_has_colors):
         from mlx_commander.tui.state import ThemeMode
         state = CommanderState()
         self.assertEqual(state.theme_mode, ThemeMode.MODERN)
 
         # Press F9 -> switches to Norton
-        # Press 9 -> switches back to Modern
-        # Press t -> switches to Norton
-        # Press T -> switches back to Modern
+        # Press 9 -> ignored (does not toggle)
+        # Press t -> ignored (does not toggle)
+        # Press T -> ignored (does not toggle)
+        # Press F9 -> switches back to Modern
         # Press q -> quit
         self.mock_win.getch.side_effect = [
             curses.KEY_F9,
             ord("9"),
             ord("t"),
             ord("T"),
+            curses.KEY_F9,
             ord("q"),
         ]
         run_commander_tui(self.mock_win, initial_state=state)
@@ -562,6 +564,7 @@ class TestCommanderUI(unittest.TestCase):
         self.assertIn("Output", full_rendered)
         self.assertIn("Convert", full_rendered)
         self.assertIn("Scheme", full_rendered)
+        self.assertIn("F9", full_rendered)
         self.assertIn("Exit", full_rendered)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
