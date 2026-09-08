@@ -1,5 +1,5 @@
 """
-Terminal Spawner for MLX-Commander.
+Terminal Spawner for MLX Commander.
 Enables AI agents (Antigravity, Claude Desktop, Cursor, MCP clients) and non-interactive
 subshells to spawn an interactive macOS Terminal window running the curses TUI,
 awaiting completion via a file-based status handshake.
@@ -73,7 +73,7 @@ def spawn_terminal_tui(
     working_dir: Optional[str] = None,
 ) -> int:
     """
-    Spawn the MLX-Commander TUI in a dedicated macOS Terminal.app window
+    Spawn the MLX Commander TUI in a dedicated macOS Terminal.app window
     and block synchronously until user completes conversion or exits.
 
     Returns:
@@ -125,7 +125,7 @@ def spawn_terminal_tui(
         start_time = time.time()
         while True:
             if timeout and (time.time() - start_time) > timeout:
-                sys.stderr.write("Timed out waiting for MLX-Commander TUI session.\n")
+                sys.stderr.write("Timed out waiting for MLX Commander TUI session.\n")
                 return 1
 
             if os.path.exists(status_file):

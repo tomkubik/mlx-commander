@@ -87,7 +87,7 @@ def draw_header(stdscr: curses.window, title: str, step_info: str) -> None:
 
     stdscr.attron(header_attr)
     safe_addstr(stdscr, 0, 0, " " * max_x, header_attr)
-    safe_addstr(stdscr, 0, 2, f"MLX-Commander  ::  {title}", header_attr)
+    safe_addstr(stdscr, 0, 2, f"MLX Commander  ::  {title}", header_attr)
     stdscr.attroff(header_attr)
 
     if step_info:
@@ -386,7 +386,7 @@ def show_missing_dependency_dialog(
         wrapped = textwrap.wrap(line, width=inner_w, break_long_words=True)
         wrapped_lines.extend(wrapped if wrapped else [""])
 
-    extra_cmd = f"pip install 'mlx-commander[{extra_name}]'"
+    extra_cmd = f"pip install 'mlx_commander[{extra_name}]'"
     cmd_box_width = min(inner_w, max(len(install_command) + 6, len(extra_cmd) + 6, 38))
 
     h = len(wrapped_lines) + 3 + 4 + 3
@@ -1007,12 +1007,12 @@ def show_help_dialog(stdscr: curses.window) -> None:
         ("F9 / 9 / t", "Toggle color scheme (Norton Commander <-> Modern)"),
         ("r / R", "Randomize split seed"),
         ("? / F1", "Show this help screen"),
-        ("F10 / q / Esc", "Exit MLX-Commander"),
+        ("F10 / q / Esc", "Exit MLX Commander"),
     ]
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(2) | curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, " MLX-Commander Keyboard Shortcuts ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " MLX Commander Keyboard Shortcuts ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         for r in range(1, h - 1):
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(2))
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(2) | curses.A_BOLD)

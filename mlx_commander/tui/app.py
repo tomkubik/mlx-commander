@@ -1,5 +1,5 @@
 """
-MLX-Commander: Persistent Full-Screen Curses TUI Dashboard.
+MLX Commander: Persistent Full-Screen Curses TUI Dashboard.
 Dual-panel Norton Commander-style interface with real-time reactive JSONL preview.
 
 Layout:
@@ -209,7 +209,7 @@ def run_commander_tui(
     initial_state: Optional[CommanderState] = None,
     prefill: Optional[Dict[str, Any]] = None,
 ) -> Optional[ConversionResult]:
-    """Main event loop for the persistent MLX-Commander dashboard."""
+    """Main event loop for the persistent MLX Commander dashboard."""
     configure_escdelay(25)
     state = initial_state if initial_state is not None else CommanderState()
 
@@ -284,7 +284,7 @@ def run_commander_tui(
 
         # Check for minimum terminal dimension
         if max_y < 16 or max_x < 70:
-            safe_addstr(stdscr, 1, 2, "Terminal window too small for MLX-Commander.", curses.A_BOLD)
+            safe_addstr(stdscr, 1, 2, "Terminal window too small for MLX Commander.", curses.A_BOLD)
             safe_addstr(stdscr, 2, 2, f"Current: {max_x}x{max_y} (Minimum required: 70x16)", curses.A_DIM)
             safe_addstr(stdscr, 4, 2, "Please resize your terminal window or press [q] to exit.", curses.A_DIM)
             stdscr.refresh()
@@ -299,10 +299,10 @@ def run_commander_tui(
         hdr_attr = (get_color(COLOR_BANNER) | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
         safe_addstr(stdscr, 0, 0, " " * max_x, hdr_attr)
         if ThemeMode.is_norton(state.theme_mode):
-            safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Norton Commander Classic Mode", hdr_attr)
+            safe_addstr(stdscr, 0, 2, "MLX Commander  ::  Norton Commander Classic Mode", hdr_attr)
             hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9/9/t: Scheme | F10: Exit]" if max_x >= 96 else "[F1: Help | F9/t: Scheme]"
         else:
-            safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
+            safe_addstr(stdscr, 0, 2, "MLX Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
             hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9/9/t: Scheme | F10: Exit]" if max_x >= 98 else "[F1: Help | F10: Exit]"
         safe_addstr(stdscr, 0, max(2, max_x - len(hint_str) - 2), hint_str, hdr_attr)
 
@@ -912,7 +912,7 @@ def launch_tui(
     initial_state: Optional[CommanderState] = None,
     prefill: Optional[Dict[str, Any]] = None,
 ) -> Optional[ConversionResult]:
-    """Launch the MLX-Commander full-screen curses dashboard with optional prefill."""
+    """Launch the MLX Commander full-screen curses dashboard with optional prefill."""
     configure_escdelay(25)
     try:
         return curses.wrapper(run_commander_tui, default_dataset_path, initial_state, prefill)

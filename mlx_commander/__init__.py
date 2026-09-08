@@ -1,5 +1,5 @@
 """
-mlx-commander - Hugging Face to MLX Dataset Converter
+mlx_commander - Hugging Face to MLX Dataset Converter
 Convert Hugging Face datasets into Apple MLX fine-tuning formats with interactive TUI and CLI.
 """
 

@@ -1,13 +1,13 @@
 ---
 name: mlx-dataset-prep
-description: Prepare, inspect, and convert Hugging Face datasets into Apple MLX format (mlx-lm) for LoRA fine-tuning using MLX-Commander's pre-populated TUI dashboard or headless CLI.
+description: Prepare, inspect, and convert Hugging Face datasets into Apple MLX format (mlx-lm) for LoRA fine-tuning using MLX Commander's pre-populated TUI dashboard or headless CLI.
 ---
 
-# MLX-Commander: Agent Skill for Apple MLX Dataset Preparation
+# MLX Commander: Agent Skill for Apple MLX Dataset Preparation
 
 This skill teaches AI agents (such as Antigravity, Claude Code, Cursor, and others) how to prepare and convert datasets for Apple Silicon MLX (`mlx-lm`) fine-tuning.
 
-Instead of asking the user endless sequential questions in chat ("Which column is prompt?", "What split ratio do you want?"), **inspect the dataset, formulate recommended settings, and launch MLX-Commander with pre-populated arguments**. 
+Instead of asking the user endless sequential questions in chat ("Which column is prompt?", "What split ratio do you want?"), **inspect the dataset, formulate recommended settings, and launch MLX Commander with pre-populated arguments**. 
 
 The user gets an instant 3-second tactile review with live JSONL preview in the TUI, presses **[F5 Convert]**, and hands control back to you with a structured manifest.
 
@@ -28,7 +28,7 @@ sequenceDiagram
     autonumber
     actor User as User (Human Developer)
     participant Agent as AI Agent (Antigravity / Claude / Cursor)
-    participant TUI as MLX-Commander TUI (macOS Terminal)
+    participant TUI as MLX Commander TUI (macOS Terminal)
     actor MLX as MLX Engine (mlx_lm.lora)
 
     User->>Agent: "Convert dataset.parquet and fine-tune Llama 3 on it."
@@ -81,7 +81,7 @@ Apple MLX (`mlx-lm`) expects one of four JSONL schemas:
 
 ---
 
-### Step 3: Launch MLX-Commander with Pre-Population
+### Step 3: Launch MLX Commander with Pre-Population
 
 Never ask the user to type columns or splits. Pre-fill your best inferences into the command:
 
@@ -89,7 +89,7 @@ Never ask the user to type columns or splits. Pre-fill your best inferences into
 Launch the TUI with `--spawn-terminal` so it pops up in a native macOS Terminal window with the live JSONL preview rendered immediately:
 
 ```bash
-mlx-commander --tui --spawn-terminal \
+mlx_commander --tui --spawn-terminal \
   --dataset "path/to/dataset.parquet" \
   --format prompt_completion \
   --prompt-col question \
@@ -101,7 +101,7 @@ mlx-commander --tui --spawn-terminal \
 
 Or pass a `--prefill-state` JSON string:
 ```bash
-mlx-commander --tui --spawn-terminal \
+mlx_commander --tui --spawn-terminal \
   --prefill-state '{"dataset": "path/to/dataset.parquet", "format": "chat", "messages_col": "conversations", "train": 90, "valid": 10, "test": 0}'
 ```
 
@@ -110,7 +110,7 @@ The command will block until the user presses **[F5 Convert]** or **[F10 / ESC E
 #### Mode B: Automated Headless Conversion (Only when explicitly asked)
 If the user explicitly says *"Don't ask, convert it in the background"*:
 ```bash
-mlx-commander \
+mlx_commander \
   --dataset "path/to/dataset.parquet" \
   --format prompt_completion \
   --prompt-col question \
@@ -123,7 +123,7 @@ mlx-commander \
 
 ### Step 4: Process the Manifest Handshake
 
-Upon completion, MLX-Commander writes `mlx_manifest.json` inside the output directory (or at `--manifest-file`):
+Upon completion, MLX Commander writes `mlx_manifest.json` inside the output directory (or at `--manifest-file`):
 
 ```json
 {

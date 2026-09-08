@@ -169,14 +169,13 @@ class TestCLI(unittest.TestCase):
 
         cmds = [
             [python_bin, "mlx_commander.py", "--version"],
-            [python_bin, "mlx-commander.py", "--version"],
             [python_bin, "run.py", "--version"],
             [python_bin, "-m", "mlx_commander", "--version"],
         ]
         for cmd in cmds:
             p = subprocess.run(cmd, cwd=str(root_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             self.assertEqual(p.returncode, 0, f"Command failed: {cmd}, stderr: {p.stderr}")
-            self.assertIn("mlx-commander", p.stdout)
+            self.assertIn("mlx_commander", p.stdout)
 
     def test_cli_no_fallback_to_wizard_on_tui_error(self):
         from unittest.mock import patch

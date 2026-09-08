@@ -1,5 +1,5 @@
 """
-Custom exceptions for MLX-Commander.
+Custom exceptions for MLX Commander.
 """
 
 from typing import Optional
@@ -35,5 +35,5 @@ class MissingDependencyError(RuntimeError):
 
     @property
     def pip_extra(self) -> str:
-        """Return the pip command using mlx-commander extra syntax."""
-        return f"pip install 'mlx-commander[{self.extra_name}]'"
+        """Return the pip command using mlx_commander extra syntax."""
+        return f"pip install 'mlx_commander[{self.extra_name}]'"

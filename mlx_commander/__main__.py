@@ -1,6 +1,6 @@
 """Top-level package execution entry point.
 
-Allows running MLX-Commander via:
+Allows running MLX Commander via:
     python3 -m mlx_commander
 """
 import sys

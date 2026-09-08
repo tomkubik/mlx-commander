@@ -1,5 +1,5 @@
 """
-Central Application State for MLX-Commander persistent TUI.
+Central Application State for MLX Commander persistent TUI.
 Maintains dataset info, format configuration, column mappings,
 active panel focus, and reactive preview cache.
 """

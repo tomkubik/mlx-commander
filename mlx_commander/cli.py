@@ -83,24 +83,24 @@ def parse_prefill_state(val: str) -> dict:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="mlx-commander",
+        prog="mlx_commander",
         description="Convert Hugging Face datasets into Apple MLX (mlx-lm) format with TUI or CLI.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Launch interactive TUI wizard:
-  mlx-commander
+  mlx_commander
 
   # Launch line-by-line CLI wizard:
-  mlx-commander --no-tui
+  mlx_commander --no-tui
 
   # Direct conversion from CLI:
-  mlx-commander -d ./my_hf_dataset -f prompt_completion -o ./mlx_out \
+  mlx_commander -d ./my_hf_dataset -f prompt_completion -o ./mlx_out \
          --prompt-col question --completion-col answer \
          --train 80 --valid 10 --test 10 --seed 42
 
   # Combine multiple dataset files with schema verification & re-splitting:
-  mlx-commander -d train.jsonl test.jsonl -f prompt_completion -o ./mlx_out \
+  mlx_commander -d train.jsonl test.jsonl -f prompt_completion -o ./mlx_out \
          --prompt-col question --completion-col answer
         """,
     )
@@ -175,13 +175,13 @@ Examples:
         "--commander", "--tui",
         action="store_true",
         dest="commander",
-        help="Launch full-screen persistent MLX-Commander TUI dashboard (default in interactive terminal).",
+        help="Launch full-screen persistent MLX Commander TUI dashboard (default in interactive terminal).",
     )
     parser.add_argument(
         "--wizard", "--no-tui", "--cli",
         action="store_true",
         dest="wizard",
-        help="Run sequential step-by-step terminal wizard instead of persistent MLX-Commander dashboard.",
+        help="Run sequential step-by-step terminal wizard instead of persistent MLX Commander dashboard.",
     )
 
     return parser

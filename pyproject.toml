@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mlx-commander"
+name = "mlx_commander"
 version = "0.2.0"
 description = "Convert Hugging Face datasets into Apple MLX formats, configure parameters, and run training and fine-tuning via interactive TUI and CLI"
 readme = "README.md"
@@ -47,11 +47,10 @@ all = [
 
 [project.scripts]
 mlx_commander = "mlx_commander.cli:main"
-mlx-commander = "mlx_commander.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/tomkubik/mlx-commander"
-Repository = "https://github.com/tomkubik/mlx-commander.git"
+Homepage = "https://github.com/tomkubik/mlx_commander"
+Repository = "https://github.com/tomkubik/mlx_commander.git"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mlx_commander"]
@@ -60,7 +59,6 @@ packages = ["mlx_commander"]
 include = [
     "/mlx_commander",
     "/mlx_commander.py",
-    "/mlx-commander.py",
     "/run.py",
     "/README.md",
     "/LICENSE",

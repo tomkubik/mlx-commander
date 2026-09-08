@@ -1,4 +1,4 @@
-# MLX-Commander 🚀
+# MLX Commander
 
 A fast, persistent dual-panel TUI (Norton Commander style) & CLI converter for preparing Hugging Face datasets into Apple Silicon MLX fine-tuning formats (`mlx-lm`).
 
@@ -6,7 +6,7 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 - **Persistent Multi-Panel TUI (Norton Commander style)**: Full keyboard navigation (`Tab` to switch panels, `↑`/`↓` to navigate, `Enter` to edit/open dropdowns, `F2` for Finder, `F5` to convert).
 - **AI Agent Skill & TUI Pre-Population**: Coding agents (Antigravity, Claude, Cursor) can inspect dataset schemas, pre-populate format, column mappings, and splits, and launch the TUI for split-second visual confirmation.
@@ -30,16 +30,15 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 
 ---
 
-## 📦 Quick Start
+## Quick Start
 
-### 1. Launch MLX-Commander (Default)
+### 1. Launch MLX Commander (Default)
 
 Launch the interactive dashboard using any of these equivalent commands:
 
 ```bash
 # Recommended for local repository execution (Primary):
 python3 mlx_commander.py
-# (python3 mlx-commander.py is also supported)
 
 # Or via secondary compatibility alias:
 python3 run.py
@@ -48,7 +47,7 @@ python3 run.py
 python3 -m mlx_commander
 
 # Or zero-install directly via uvx from GitHub:
-uvx --from git+https://github.com/tomkubik/mlx-commander.git mlx_commander
+uvx --from git+https://github.com/tomkubik/mlx_commander.git mlx_commander
 
 # Or via PyPI (once published):
 uvx mlx_commander
@@ -59,7 +58,7 @@ You can also pass arguments directly (e.g. pre-loading a dataset or multiple fil
 python3 mlx_commander.py -d /path/to/my_hf_dataset
 # Or combine multiple files:
 python3 mlx_commander.py -d train.jsonl test.jsonl
-# (python3 mlx-commander.py and python3 run.py accept all the same arguments)
+# (python3 run.py accepts all the same arguments)
 ```
 
 ### 2. Line-by-Line Wizard Mode
@@ -67,7 +66,7 @@ python3 mlx_commander.py -d train.jsonl test.jsonl
 For SSH sessions or non-curses environments:
 
 ```bash
-python3 mlx-commander.py --wizard
+python3 mlx_commander.py --wizard
 ```
 
 ### 3. Direct Command-Line Conversion (Automated / Headless)
@@ -75,7 +74,7 @@ python3 mlx-commander.py --wizard
 You can pass all options via flags for direct scripted conversions:
 
 ```bash
-python3 mlx-commander.py \
+python3 mlx_commander.py \
   --dataset /path/to/my_hf_dataset \
   --format prompt_completion \
   --prompt-col instruction \
@@ -89,10 +88,10 @@ python3 mlx-commander.py \
 
 ---
 
-## 🖥️ Command Line Reference
+## Command Line Reference
 
 ```
-usage: mlx-commander [-h] [-v] [-d DATASET [DATASET ...]]
+usage: mlx_commander [-h] [-v] [-d DATASET [DATASET ...]]
                      [-f {text,chat,prompt_completion,dpo}]
                      [-o OUTPUT] [--train TRAIN] [--valid VALID] [--test TEST]
                      [--seed SEED] [--keep-splits] [--mapping MAPPING]
@@ -135,22 +134,22 @@ usage: mlx-commander [-h] [-v] [-d DATASET [DATASET ...]]
 
 ---
 
-## 🤖 AI Agent Integration & MCP Support
+## AI Agent Integration & MCP Support
 
-MLX-Commander is designed for the modern AI agent era (**Antigravity**, **Claude Desktop**, **Cursor**, **Zed**, **Cline**). 
+MLX Commander is designed for the modern AI agent era (**Antigravity**, **Claude Desktop**, **Cursor**, **Zed**, **Cline**). 
 
-Instead of an agent interrogating users with 10 sequential chat prompts or guessing schemas blindly, agents can **inspect schemas, formulate recommended settings, and launch MLX-Commander with pre-populated values**. 
+Instead of an agent interrogating users with 10 sequential chat prompts or guessing schemas blindly, agents can **inspect schemas, formulate recommended settings, and launch MLX Commander with pre-populated values**. 
 
 The user gets a 3-second tactile review with live JSONL preview in the Norton Commander TUI, presses **[F5 Convert]**, and hands control back to the agent with a machine-readable manifest.
 
-### 🔄 The End-to-End Workflow
+### The End-to-End Workflow
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as User (Human Developer)
     participant Agent as AI Agent (Antigravity / Claude / Cursor)
-    participant TUI as MLX-Commander TUI (macOS Terminal)
+    participant TUI as MLX Commander TUI (macOS Terminal)
     actor MLX as MLX Engine (mlx_lm.lora)
 
     User->>Agent: "Convert dataset.parquet and fine-tune Llama 3 on it."
@@ -172,7 +171,7 @@ sequenceDiagram
 Agents can pre-populate every field of `CommanderState` via CLI flags or a JSON payload:
 - **Via CLI Flags**:
   ```bash
-  mlx-commander --tui --spawn-terminal \
+  mlx_commander --tui --spawn-terminal \
     --dataset "./data.parquet" \
     --format chat \
     --messages-col conversations \
@@ -181,7 +180,7 @@ Agents can pre-populate every field of `CommanderState` via CLI flags or a JSON 
   ```
 - **Via JSON (`--prefill-state`)**:
   ```bash
-  mlx-commander --tui --spawn-terminal \
+  mlx_commander --tui --spawn-terminal \
     --prefill-state '{"dataset": "./data.parquet", "format": "prompt_completion", "prompt_col": "question", "completion_col": "answer", "train": 80, "valid": 20}'
   ```
 When launched with pre-fill data, the TUI opens directly with focus on the mappings panel and renders the reactive JSONL preview immediately.
@@ -235,13 +234,13 @@ When invoked by background agent runners (such as IDE extensions, subshells, or 
 
 ### Model Context Protocol (MCP) Server
 
-MLX-Commander includes a built-in MCP server that works over `stdio`.
+MLX Commander includes a built-in MCP server that works over `stdio`.
 
 #### 1. Claude Desktop Setup (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "mlx-commander": {
+    "mlx_commander": {
       "command": "python3",
       "args": ["-m", "mlx_commander", "--mcp"]
     }
@@ -252,9 +251,9 @@ MLX-Commander includes a built-in MCP server that works over `stdio`.
 ```json
 {
   "mcpServers": {
-    "mlx-commander": {
+    "mlx_commander": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/tomkubik/mlx-commander.git", "--with", "mcp", "mlx-commander", "--mcp"]
+      "args": ["--from", "git+https://github.com/tomkubik/mlx_commander.git", "--with", "mcp", "mlx_commander", "--mcp"]
     }
   }
 }
@@ -264,7 +263,7 @@ MLX-Commander includes a built-in MCP server that works over `stdio`.
 ```json
 {
   "mcpServers": {
-    "mlx-commander": {
+    "mlx_commander": {
       "command": "python3",
       "args": ["-m", "mlx_commander", "--mcp"]
     }
@@ -294,7 +293,7 @@ AI agents that support skill discovery (like **Antigravity**) automatically read
 
 ---
 
-## 🛠️ Step-by-Step Wizard Walkthrough
+## Step-by-Step Wizard Walkthrough
 
 1. **Step 1: Dataset Source**: Select your dataset folder or file on your drive. The tool validates the file, inspects column names, row counts, and existing splits.
 2. **Step 2: MLX Format**: Choose your target format (`Text`, `Chat / Messages`, `Prompt & Completion`, `DPO / Preference`).
@@ -305,7 +304,7 @@ AI agents that support skill discovery (like **Antigravity**) automatically read
 
 ---
 
-## 🚀 Running Fine-Tuning with Apple MLX
+## Running Fine-Tuning with Apple MLX
 
 Once your dataset is converted, fine-tune an LLM on Apple Silicon with `mlx-lm`:
 
@@ -321,7 +320,7 @@ mlx_lm.lora \
 
 ---
 
-## 🧪 Running Unit Tests
+## Running Unit Tests
 
 Run the test suite with Python's built-in `unittest`:
 

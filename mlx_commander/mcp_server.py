@@ -1,5 +1,5 @@
 """
-Model Context Protocol (MCP) Server for MLX-Commander.
+Model Context Protocol (MCP) Server for MLX Commander.
 Exposes dataset inspection, pre-populated interactive TUI launching,
 and headless conversion tools to AI agents (Claude Desktop, Cursor, Antigravity, Cline, Zed).
 """
@@ -72,7 +72,7 @@ def launch_conversion_tui_tool(
     output_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Pre-populates and launches the MLX-Commander interactive TUI in a macOS Terminal window.
+    Pre-populates and launches the MLX Commander interactive TUI in a macOS Terminal window.
     The user can review live JSONL preview, adjust settings with arrow keys, and press Convert.
     Synchronously awaits completion and returns the conversion manifest.
     """
@@ -214,8 +214,8 @@ def create_mcp_server():
     from mcp.server.fastmcp import FastMCP
 
     server = FastMCP(
-        name="mlx-commander",
-        instructions="MLX-Commander: Tool suite for inspecting and converting Hugging Face datasets into Apple MLX format with pre-populated TUI review.",
+        name="mlx_commander",
+        instructions="MLX Commander: Tool suite for inspecting and converting Hugging Face datasets into Apple MLX format with pre-populated TUI review.",
     )
 
     @server.tool()
@@ -236,7 +236,7 @@ def create_mcp_server():
         test_pct: float = 10.0,
         output_dir: Optional[str] = None,
     ) -> dict:
-        """Launch the MLX-Commander persistent Norton Commander TUI dashboard in a macOS Terminal window
+        """Launch the MLX Commander persistent Norton Commander TUI dashboard in a macOS Terminal window
         with pre-populated settings for user visual confirmation and live JSONL preview. Returns conversion manifest."""
         return launch_conversion_tui_tool(
             dataset_path=dataset_path,
@@ -297,9 +297,9 @@ def run_mcp_server() -> int:
         sys.stderr.write(
             "Error: 'mcp' package is required to run the MCP server.\n"
             "Install it via:\n"
-            "    pip install 'mlx-commander[mcp]'\n"
+            "    pip install 'mlx_commander[mcp]'\n"
             "or run with uvx:\n"
-            "    uvx --with mcp mlx-commander --mcp\n"
+            "    uvx --with mcp mlx_commander --mcp\n"
         )
         return 1
 

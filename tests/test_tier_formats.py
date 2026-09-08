@@ -149,7 +149,7 @@ class TestTierFormats(unittest.TestCase):
             self.assertEqual(exc.format_name, "Parquet")
             self.assertEqual(exc.package_name, "pyarrow")
             self.assertEqual(exc.install_command, "pip install pyarrow")
-            self.assertEqual(exc.pip_extra, "pip install 'mlx-commander[parquet]'")
+            self.assertEqual(exc.pip_extra, "pip install 'mlx_commander[parquet]'")
 
     def test_parquet_dir_missing_pyarrow_raises_interstitial_error(self):
         dir_path = Path(self.temp_dir) / "parquet_shards"
@@ -189,7 +189,7 @@ class TestTierFormats(unittest.TestCase):
             self.assertEqual(exc.format_name, "DuckDB")
             self.assertEqual(exc.package_name, "duckdb")
             self.assertEqual(exc.install_command, "pip install duckdb")
-            self.assertEqual(exc.pip_extra, "pip install 'mlx-commander[duckdb]'")
+            self.assertEqual(exc.pip_extra, "pip install 'mlx_commander[duckdb]'")
 
     def test_lance_missing_pylance_raises_interstitial_error(self):
         dir_path = Path(self.temp_dir) / "dataset.lance"
@@ -203,7 +203,7 @@ class TestTierFormats(unittest.TestCase):
             self.assertEqual(exc.format_name, "Lance")
             self.assertEqual(exc.package_name, "pylance")
             self.assertEqual(exc.install_command, "pip install pylance")
-            self.assertEqual(exc.pip_extra, "pip install 'mlx-commander[lance]'")
+            self.assertEqual(exc.pip_extra, "pip install 'mlx_commander[lance]'")
 
     def test_is_lance_dir_detection(self):
         lance_dir = Path(self.temp_dir) / "test_data.lance"

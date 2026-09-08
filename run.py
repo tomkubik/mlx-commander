@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Secondary / compatibility launcher for MLX-Commander.
+"""Secondary / compatibility launcher for MLX Commander.
 
 Primary launcher:
-    python3 mlx-commander.py
+    python3 mlx_commander.py
 
 This script is retained as an alias for backward compatibility:
     python3 run.py
