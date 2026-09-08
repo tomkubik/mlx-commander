@@ -347,11 +347,13 @@ def run_commander_tui(
 
         # Source path display
         disp_path = state.dataset_path or "<no path set>"
-        max_path_w = left_w - 10
+        tab1_right_edge = left_w - 3
+        max_path_w = max(10, left_w - 12)
         if len(disp_path) > max_path_w:
             disp_path = "…" + disp_path[-(max_path_w - 1):]
+        path_x = max(8, tab1_right_edge - len(disp_path) + 1)
         safe_addstr(stdscr, 2, 2, "Path: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        safe_addstr(stdscr, 2, 8, disp_path[:max_path_w], get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, 2, path_x, disp_path, get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else curses.A_DIM)
 
         # Action Buttons (stacked vertically)
         f2_focus = is_left and state.left_focus_idx == 0
@@ -451,8 +453,12 @@ def run_commander_tui(
             is_foc = (is_right and state.right_focus_idx == f_i)
             draw_radio(stdscr, row_y, left_w + 4, lbl_text, is_checked=is_chk, is_focused=is_foc)
 
+        right_edge = left_w + right_w - 3
+
         # Fields 4..(3 + len(mapping_fields)): Column Mappings
         safe_addstr(stdscr, 7, left_w + 2, "Column Mappings [Press Enter]:", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        mapping_val_w = min(22, max(12, right_w - 24))
+
         for idx, f_info in enumerate(mapping_fields):
             row_y = 8 + idx
             is_f_focused = is_right and (state.right_focus_idx == 4 + idx)
@@ -463,8 +469,9 @@ def run_commander_tui(
                 f_info["label"],
                 str(f_info["current"] or "<None>"),
                 is_focused=is_f_focused,
-                val_width=min(22, right_w - len(f_info["label"]) - 8),
+                val_width=mapping_val_w,
                 has_dropdown=True,
+                right_edge=right_edge,
             )
 
         # Next rows: Splits & Output
@@ -475,15 +482,18 @@ def run_commander_tui(
         valid_focus = is_right and state.right_focus_idx == 5 + len(mapping_fields)
         test_focus = is_right and state.right_focus_idx == 6 + len(mapping_fields)
 
+        # Splits layout: Train (15), Valid (15), Test (14) = 46 cols total
         if right_w >= 62:
             safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-            train_x = left_w + 14
-            valid_x = left_w + 30
-            test_x = left_w + 46
+            test_x = right_edge - 14 + 1
+            valid_x = test_x - 16
+            train_x = valid_x - 16
         else:
-            train_x = left_w + 2
-            valid_x = left_w + 18
-            test_x = left_w + 34
+            train_x = max(left_w + 2, right_edge - 46 + 1)
+            valid_x = train_x + 16
+            test_x = valid_x + 16
+            if train_x >= left_w + 14:
+                safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
 
         draw_field(stdscr, splits_start_y, train_x, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=6)
         draw_field(stdscr, splits_start_y, valid_x, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=6)
@@ -493,13 +503,29 @@ def run_commander_tui(
         seed_y = splits_start_y + 1
         seed_focus = is_right and state.right_focus_idx == 7 + len(mapping_fields)
         rand_focus = is_right and state.right_focus_idx == 8 + len(mapping_fields)
-        draw_field(stdscr, seed_y, left_w + 2, "Seed", str(state.seed), is_focused=seed_focus, val_width=8)
-        draw_button(stdscr, seed_y, left_w + 18, "Randomize (r)", is_focused=rand_focus)
+
+        btn_w = 17  # len("[ Randomize (r) ]")
+        seed_box_w = 10  # len("[ 123456 ]") with val_width=8
+        btn_x = max(left_w + 18, right_edge - btn_w + 1)
+        seed_field_x = max(left_w + 8, btn_x - 2 - seed_box_w)
+
+        draw_field(stdscr, seed_y, left_w + 2, "Seed", str(state.seed), is_focused=seed_focus, val_width=8, field_x=seed_field_x)
+        draw_button(stdscr, seed_y, btn_x, "Randomize (r)", is_focused=rand_focus)
 
         # Output Folder
         out_y = seed_y + 1
         out_focus = is_right and state.right_focus_idx == 9 + len(mapping_fields)
-        draw_field(stdscr, out_y, left_w + 2, "Output", state.output_dir, is_focused=out_focus, val_width=min(24, right_w - 14), has_dropdown=True)
+        draw_field(
+            stdscr,
+            out_y,
+            left_w + 2,
+            "Output",
+            state.output_dir,
+            is_focused=out_focus,
+            val_width=mapping_val_w,
+            has_dropdown=True,
+            right_edge=right_edge,
+        )
 
         # Convert Action Button
         conv_focus = is_right and state.right_focus_idx == 10 + len(mapping_fields)

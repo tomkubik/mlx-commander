@@ -606,12 +606,23 @@ def draw_field(
     is_focused: bool = False,
     val_width: int = 24,
     has_dropdown: bool = False,
+    right_edge: Optional[int] = None,
+    field_x: Optional[int] = None,
 ) -> None:
-    """Draw a labeled form field with deep blue background and active bright white font."""
+    """Draw a labeled form field with deep blue background and active bright white font.
+
+    If right_edge is specified, aligns the field box so its right bracket is at right_edge,
+    while keeping the label aligned at x (the left side).
+    If field_x is specified, renders the box starting explicitly at field_x.
+    """
     lbl = f"{label}: "
     lbl_attr = (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     safe_addstr(win, y, x, lbl, lbl_attr)
-    val_x = x + len(lbl)
+
+    if right_edge is not None and field_x is None:
+        avail_for_box = right_edge - (x + len(lbl)) + 1
+        if avail_for_box > 4 and val_width + 2 > avail_for_box:
+            val_width = max(4, avail_for_box - 2)
 
     disp_val = val_str or "<none>"
     arrow = " ▾" if has_dropdown else ""
@@ -624,6 +635,15 @@ def draw_field(
 
     pad = " " * max(0, max_len - len(disp_val))
     box_str = f"[ {disp_val}{pad}{arrow} ]"
+
+    if field_x is not None:
+        val_x = field_x
+    elif right_edge is not None:
+        box_len = len(box_str)
+        min_val_x = x + len(lbl)
+        val_x = max(min_val_x, right_edge - box_len + 1)
+    else:
+        val_x = x + len(lbl)
 
     if is_focused:
         attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT

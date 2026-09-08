@@ -676,6 +676,115 @@ class TestCommanderUI(unittest.TestCase):
             self.assertIn("Test: [ 10%  ]", rendered_row, f"Test right bracket missing on width {term_w}: {rendered_row}")
 
 
+    def test_draw_field_right_edge_alignment(self):
+        """Verify draw_field aligns the closing bracket to right_edge while keeping label at x."""
+        from mlx_commander.tui.widgets import draw_field
+
+        self.mock_win.reset_mock()
+        draw_field(self.mock_win, 5, 10, "Prompt", "instruction", val_width=18, right_edge=75)
+
+        lbl_x = None
+        box_x = None
+        box_str = None
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str):
+                y, x, text = args[0], args[1], args[2]
+                if y == 5 and "Prompt:" in text:
+                    lbl_x = x
+                elif y == 5 and text.startswith("["):
+                    box_x = x
+                    box_str = text
+
+        self.assertEqual(lbl_x, 10, "Label should remain at x=10")
+        self.assertIsNotNone(box_x)
+        self.assertIsNotNone(box_str)
+        self.assertEqual(box_x + len(box_str) - 1, 75, "Field box closing bracket should end exactly at right_edge=75")
+
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_tui_fields_right_aligned_and_labels_left_aligned(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify all input fields in Tab 2 are right-aligned while labels remain left-aligned."""
+        self.mock_win.reset_mock()
+        term_w = 120
+        self.mock_win.getmaxyx.return_value = (30, term_w)
+        left_w = term_w // 2  # 60
+        right_w = term_w - left_w  # 60
+        tab2_right_edge = left_w + right_w - 3  # 117
+        tab1_right_edge = left_w - 3  # 57
+
+        state = CommanderState()
+        self.mock_win.getch.side_effect = [ord("q")]
+
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        # 1. Verify Tab 1 Path label is at left (2) and path text ends at tab1_right_edge (57)
+        path_lbl_found = False
+        path_val_end = None
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str):
+                y, x, text = args[0], args[1], args[2]
+                if y == 2 and "Path:" in text:
+                    self.assertEqual(x, 2, "Tab 1 Path label must be aligned to left (x=2)")
+                    path_lbl_found = True
+                elif y == 2 and 8 <= x < left_w and not text.startswith("┌") and not text.startswith("│"):
+                    path_val_end = x + len(text) - 1
+
+        self.assertTrue(path_lbl_found)
+        self.assertEqual(path_val_end, tab1_right_edge, f"Path display in Tab 1 should end at {tab1_right_edge}")
+
+        # 2. Verify Tab 2 mapping labels start at left_w + 2 and boxes end at tab2_right_edge
+        mapping_fields = state.get_mapping_fields_for_format()
+        for idx in range(len(mapping_fields)):
+            row_y = 8 + idx
+            lbl_x = None
+            box_x = None
+            box_text = None
+            for call_args in self.mock_win.addstr.call_args_list:
+                args = call_args[0]
+                if len(args) >= 3 and isinstance(args[2], str):
+                    y, x, text = args[0], args[1], args[2]
+                    if y == row_y:
+                        if text.startswith("["):
+                            box_x = x
+                            box_text = text
+                        elif ":" in text:
+                            lbl_x = x
+
+            self.assertEqual(lbl_x, left_w + 2, f"Mapping label row {row_y} should start at left_w + 2")
+            self.assertIsNotNone(box_x, f"Mapping box row {row_y} not found")
+            self.assertEqual(
+                box_x + len(box_text) - 1,
+                tab2_right_edge,
+                f"Mapping box row {row_y} should end at right edge {tab2_right_edge}"
+            )
+
+        # 3. Verify Tab 2 Output label is at left_w + 2 and box ends at tab2_right_edge
+        out_lbl_x = None
+        out_box_x = None
+        out_box_text = None
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str):
+                y, x, text = args[0], args[1], args[2]
+                if "Output:" in text:
+                    out_lbl_x = x
+                elif out_lbl_x is not None and text.startswith("[") and "mlx_dataset" in text:
+                    out_box_x = x
+                    out_box_text = text
+
+        self.assertEqual(out_lbl_x, left_w + 2, "Output label must be at left_w + 2")
+        self.assertIsNotNone(out_box_x, "Output box must be rendered")
+        self.assertEqual(
+            out_box_x + len(out_box_text) - 1,
+            tab2_right_edge,
+            f"Output box should end at {tab2_right_edge}"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 
