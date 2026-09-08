@@ -152,6 +152,10 @@ class TestCommanderUI(unittest.TestCase):
         self.mock_win.getch.side_effect = [27]
         show_results_dialog(self.mock_win, res)
         self.assertTrue(self.mock_win.refresh.called)
+        drawn_text = " ".join(str(call) for call in self.mock_win.addstr.call_args_list)
+        self.assertIn("Conversion Successful!", drawn_text)
+        self.assertNotIn("Fine-tuning Command", drawn_text)
+        self.assertNotIn("mlx_lm.lora", drawn_text)
 
     def test_show_error_dialog_dismiss_enter(self):
         self.mock_win.getch.side_effect = [10]  # Enter key

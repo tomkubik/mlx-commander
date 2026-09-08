@@ -941,7 +941,7 @@ def show_output_destination_dialog(
 
 
 def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
-    """Modal dialog displaying conversion results and mlx_lm.lora command."""
+    """Modal dialog displaying conversion results."""
     if not hasattr(result, "output_dir") or result is False:
         msg = args[0] if args else (str(result) if result else "Operation failed.")
         show_error_dialog(stdscr, "Operation Error", msg)
@@ -951,7 +951,8 @@ def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
     safe_curs_set(0)
 
     max_y, max_x = stdscr.getmaxyx()
-    h = min(17, max_y - 2)
+    num_files = len(getattr(result, "output_files", {}))
+    h = min(max(9, 7 + num_files), max_y - 2)
     w = min(74, max_x - 4)
     start_y = max(1, (max_y - h) // 2)
     start_x = max(1, (max_x - w) // 2)
@@ -963,21 +964,13 @@ def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(3))
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(3) | curses.A_BOLD)
 
-        safe_addstr(stdscr, start_y + 2, start_x + 3, f"Saved dataset to: {result.output_dir}", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y + 2, start_x + 3, f"Saved dataset to: {result.output_dir}"[: w - 6], (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         row = start_y + 4
-        for split_name, file_path in result.output_files.items():
-            cnt = result.record_counts.get(split_name, 0)
-            sz = result.file_sizes.get(split_name, 0) / 1024.0
-            safe_addstr(stdscr, row, start_x + 3, f"• {file_path.name}: {cnt:,} records ({sz:.1f} KB)", (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
-            row += 1
-
-        row += 1
-        safe_addstr(stdscr, row, start_x + 3, "MLX Fine-tuning Command:", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
-        row += 1
-        cmd_lines = result.generate_mlx_lora_command().strip().split("\n")
-        for line in cmd_lines[:6]:
+        for split_name, file_path in getattr(result, "output_files", {}).items():
             if row < start_y + h - 2:
-                safe_addstr(stdscr, row, start_x + 5, line[: w - 8], get_color(2))
+                cnt = getattr(result, "record_counts", {}).get(split_name, 0)
+                sz = getattr(result, "file_sizes", {}).get(split_name, 0) / 1024.0
+                safe_addstr(stdscr, row, start_x + 3, f"• {file_path.name}: {cnt:,} records ({sz:.1f} KB)"[: w - 6], (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
                 row += 1
 
         safe_addstr(stdscr, start_y + h - 2, start_x + 3, "Press [Enter], [Space], or [Esc] to return", (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT)
