@@ -45,6 +45,21 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 Launch the interactive dashboard using any of these equivalent commands:
 
 ```bash
+# Install via pip from PyPI and run anywhere:
+pip install mlx_commander
+mlx_commander
+
+# Or install with all format extras (Parquet, Arrow, DuckDB, Lance, MCP):
+pip install "mlx_commander[all]"
+mlx_commander
+
+# Or run instantly without installation via uvx:
+uvx mlx_commander
+
+# Or install globally as a tool via uv:
+uv tool install mlx_commander
+mlx_commander
+
 # Recommended for local repository execution (Primary):
 python3 mlx_commander.py
 
@@ -53,12 +68,6 @@ python3 run.py
 
 # Or as a Python package module:
 python3 -m mlx_commander
-
-# Or zero-install directly via uvx from GitHub:
-uvx --from git+https://github.com/tomkubik/mlx_commander.git mlx_commander
-
-# Or via PyPI (once published):
-uvx mlx_commander
 ```
 
 You can also pass arguments directly (e.g. pre-loading a dataset or multiple files):
