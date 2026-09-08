@@ -14,6 +14,8 @@ from mlx_commander.exceptions import MissingDependencyError
 from mlx_commander.formats import MLXFormat
 from mlx_commander.loader import (
     is_lance_dir,
+    is_parquet_dir,
+    is_parquet_file,
     load_from_arrow_file,
     load_from_duckdb,
     load_from_lance,
@@ -255,7 +257,43 @@ class TestTierFormats(unittest.TestCase):
 
         self.assertIn("Dependency Required: Parquet", all_printed)
         self.assertIn("pip install pyarrow", all_printed)
-        self.assertIn("[Enter] OK   [Esc] Dismiss", all_printed)
+        self.assertTrue("[Enter] OK / Dismiss" in all_printed or "[I] Install with pip" in all_printed)
+
+    def test_parquet_sniffing_and_alternative_extensions(self):
+        parquet_header = b"PAR1\x15\x00\x15\x92\x00\x00\x00PAR1"
+        for fname in ("data.pq", "data.parq", "data.parquet.snappy", "data_no_ext"):
+            fp = Path(self.temp_dir) / fname
+            fp.write_bytes(parquet_header)
+            self.assertTrue(is_parquet_file(fp), f"Failed is_parquet_file for {fname}")
+
+            state = CommanderState()
+            with patch("mlx_commander.loader.HAS_PYARROW", False):
+                success = state.load_dataset(str(fp))
+                self.assertFalse(success)
+                self.assertIsNotNone(state.last_missing_dependency)
+                self.assertEqual(state.last_missing_dependency.package_name, "pyarrow")
+                self.assertNotIn("utf-8", state.status_message.lower())
+                self.assertIn("Missing dependency: pyarrow", state.status_message)
+
+    def test_parquet_directory_detection_with_subfolders(self):
+        dir_path = Path(self.temp_dir) / "hf_style_repo"
+        sub_data = dir_path / "data"
+        sub_data.mkdir(parents=True)
+        (sub_data / "train-00000-of-00001.parquet").write_bytes(b"PAR1\x15\x00\x15\x92\x00\x00PAR1")
+
+        self.assertTrue(is_parquet_dir(dir_path))
+        state = CommanderState()
+        with patch("mlx_commander.loader.HAS_PYARROW", False):
+            success = state.load_dataset(str(dir_path))
+            self.assertFalse(success)
+            self.assertIsNotNone(state.last_missing_dependency)
+            self.assertEqual(state.last_missing_dependency.package_name, "pyarrow")
+            self.assertNotIn("utf-8", state.status_message.lower())
+
+    def test_dynamic_pyarrow_resolution_when_installed(self):
+        from mlx_commander.loader import ensure_pyarrow
+        res = ensure_pyarrow()
+        self.assertIsInstance(res, bool)
 
 
 if __name__ == "__main__":

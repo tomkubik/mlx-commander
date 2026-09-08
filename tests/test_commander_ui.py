@@ -472,46 +472,68 @@ class TestCommanderUI(unittest.TestCase):
 
         # Press F9 -> switches to Norton
         # Press 9 -> switches back to Modern
+        # Press t -> switches to Norton
+        # Press T -> switches back to Modern
         # Press q -> quit
         self.mock_win.getch.side_effect = [
             curses.KEY_F9,
             ord("9"),
+            ord("t"),
+            ord("T"),
             ord("q"),
         ]
         run_commander_tui(self.mock_win, initial_state=state)
         # Verify init_colors was called with both modern and norton
-        mock_colors.assert_any_call("modern")
-        mock_colors.assert_any_call("norton")
+        mock_colors.assert_any_call(ThemeMode.MODERN)
+        mock_colors.assert_any_call(ThemeMode.NORTON)
         self.assertEqual(state.theme_mode, ThemeMode.MODERN)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.curses.can_change_color", return_value=True)
+    @patch("mlx_commander.tui.app.curses.init_color")
     @patch("mlx_commander.tui.app.curses.start_color")
     @patch("mlx_commander.tui.app.curses.use_default_colors")
     @patch("mlx_commander.tui.app.curses.init_pair")
-    def test_init_colors_modern_and_norton(self, mock_init_pair, mock_default, mock_start, mock_has_colors):
+    def test_init_colors_modern_and_norton(self, mock_init_pair, mock_default, mock_start, mock_init_color, mock_can_change, mock_has_colors):
         from mlx_commander.tui.app import init_colors
         from mlx_commander.tui.widgets import (
             COLOR_BANNER,
             COLOR_BORDER_JOINTS,
+            COLOR_INPUT_FOCUSED,
             COLOR_INPUT_NORMAL,
+            COLOR_LABEL_GRAY,
+            COLOR_NORMAL_TEXT,
             COLOR_PANEL_BG,
             COLOR_TITLE_ACCENT,
         )
 
         init_colors("modern")
-        # Modern has white on blue banner, cyan borders
         mock_init_pair.assert_any_call(COLOR_BANNER, curses.COLOR_WHITE, curses.COLOR_BLUE)
         mock_init_pair.assert_any_call(COLOR_BORDER_JOINTS, curses.COLOR_CYAN, -1)
+        mock_init_pair.assert_any_call(COLOR_NORMAL_TEXT, curses.COLOR_WHITE, -1)
         mock_init_pair.assert_any_call(COLOR_INPUT_NORMAL, curses.COLOR_CYAN, -1)
 
         mock_init_pair.reset_mock()
         init_colors("norton")
-        # Norton has black on cyan banner, cyan borders on blue, yellow titles on blue, black on cyan inputs
-        mock_init_pair.assert_any_call(COLOR_BANNER, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        mock_init_pair.assert_any_call(COLOR_BORDER_JOINTS, curses.COLOR_CYAN, curses.COLOR_BLUE)
-        mock_init_pair.assert_any_call(COLOR_TITLE_ACCENT, curses.COLOR_YELLOW, curses.COLOR_BLUE)
-        mock_init_pair.assert_any_call(COLOR_INPUT_NORMAL, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        mock_init_pair.assert_any_call(COLOR_PANEL_BG, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        # Verify 6 exact VGA colors initialized
+        mock_init_color.assert_any_call(20, 0, 0, 666)          # #0000AA (Classic VGA Blue)
+        mock_init_color.assert_any_call(21, 0, 666, 666)        # #00AAAA (Cyan)
+        mock_init_color.assert_any_call(22, 1000, 1000, 1000)   # #FFFFFF (Bright White)
+        mock_init_color.assert_any_call(23, 666, 666, 666)      # #AAAAAA (Light Gray)
+        mock_init_color.assert_any_call(24, 1000, 1000, 333)    # #FFFF55 (Bright Yellow)
+        mock_init_color.assert_any_call(25, 0, 0, 0)            # #000000 (Black)
+        mock_init_color.assert_any_call(26, 333, 1000, 1000)   # #55FFFF (Ice Blue)
+
+        # Verify exact pair mappings
+        mock_init_pair.assert_any_call(COLOR_BANNER, 25, 21)         # Black on Cyan
+        mock_init_pair.assert_any_call(COLOR_BORDER_JOINTS, 21, 20)  # Cyan on Blue
+        mock_init_pair.assert_any_call(COLOR_NORMAL_TEXT, 22, 20)    # White on Blue
+        mock_init_pair.assert_any_call(COLOR_TITLE_ACCENT, 24, 20)   # Yellow on Blue
+        mock_init_pair.assert_any_call(COLOR_LABEL_GRAY, 23, 20)     # Gray on Blue
+        mock_init_pair.assert_any_call(COLOR_INPUT_NORMAL, 26, 20)   # Ice Blue on Deep Blue
+        mock_init_pair.assert_any_call(COLOR_INPUT_FOCUSED, 25, 21)  # Black on Cyan
+        mock_init_pair.assert_any_call(COLOR_PANEL_BG, 22, 20)       # White on Blue
+
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
     @patch("mlx_commander.tui.app.init_colors")
@@ -537,6 +559,27 @@ class TestCommanderUI(unittest.TestCase):
         self.assertIn("Convert", full_rendered)
         self.assertIn("Scheme", full_rendered)
         self.assertIn("Exit", full_rendered)
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_cross_tab_vertical_navigation(self, mock_curs, mock_colors, mock_has_colors):
+        from mlx_commander.tui.state import ActivePanel
+        state = CommanderState()
+        state.active_panel = ActivePanel.LEFT
+        state.left_focus_idx = 1  # Change Path button (no dataset loaded)
+
+        # Press Down -> should transition to Tab 2 (right_focus_idx = 0)
+        # Press Up -> should transition back to Tab 1 (left_focus_idx = 1)
+        # Press q -> quit
+        self.mock_win.getch.side_effect = [
+            curses.KEY_DOWN,
+            curses.KEY_UP,
+            ord("q"),
+        ]
+        run_commander_tui(self.mock_win, initial_state=state)
+        self.assertEqual(state.active_panel, ActivePanel.LEFT)
+        self.assertEqual(state.left_focus_idx, 1)
 
 
 if __name__ == "__main__":

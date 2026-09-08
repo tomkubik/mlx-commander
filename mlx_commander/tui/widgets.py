@@ -10,16 +10,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Semantic color pair constants
 COLOR_BANNER = 1         # Top Header Banner
-COLOR_BORDER_JOINTS = 2  # Borders, Frame, and Routing Joints
+COLOR_BORDER_JOINTS = 2  # Borders, Frame, and Routing Joints (Highlight / Cyan #00AAAA)
 COLOR_SUCCESS = 3        # Success, Checks
-COLOR_NORMAL_TEXT = 4    # Inactive Labels, Normal Text
+COLOR_NORMAL_TEXT = 4    # Main Text / White #FFFFFF (Standard file names and UI text)
 COLOR_ERROR = 5          # Error, Alerts
-COLOR_TITLE_ACCENT = 6   # Panel Titles / Hotkey Numbers
-COLOR_INPUT_NORMAL = 7   # User Toggleable Inputs / Buttons / Fields (Normal)
-COLOR_INPUT_FOCUSED = 8  # User Toggleable Inputs / Buttons / Fields (Focused)
-COLOR_FN_NUMBER = 9      # Norton Hotkey Bar: Key Number
-COLOR_FN_LABEL = 10      # Norton Hotkey Bar: Key Label
-COLOR_PANEL_BG = 11      # Panel Background Fill (Deep Blue in Norton)
+COLOR_TITLE_ACCENT = 6   # Panel Titles / Accents (Cursor / Yellow #FFFF55)
+COLOR_LABEL_GRAY = 7     # Label / Light Gray #AAAAAA (Inactive elements, background text)
+COLOR_INPUT_NORMAL = 8   # User Inputs / Inactive Fields (Ice Blue #55FFFF on Background Blue #0000AA)
+COLOR_INPUT_FOCUSED = 9  # Active / Focused Field (Prompt / Black on Highlight / Cyan)
+COLOR_FN_NUMBER = 10     # Norton Hotkey Bar: Key Number (White on Black)
+COLOR_FN_LABEL = 11      # Norton Hotkey Bar: Key Label (Black on Cyan)
+COLOR_PANEL_BG = 12      # Background Blue Fill #0000AA (Classic VGA Blue)
 
 
 def safe_addstr(win: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
@@ -429,14 +430,45 @@ def show_missing_dependency_dialog(
             hint_str = f"Or install optional extra: {extra_cmd}"
             safe_addstr(stdscr, curr_y, start_x + 4, hint_str[:inner_w], label_attr)
 
-        hint = "[Enter] OK   [Esc] Dismiss"
+        hint = "[I] Install with pip   [Enter] OK / Dismiss"
         safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, action_attr)
 
         stdscr.refresh()
 
         k = stdscr.getch()
-        if k in (10, 13, 32, 27, ord("q"), ord("Q")):
-            break
+        if k in (ord("i"), ord("I")):
+            installing_str = f"Installing {package_name} via pip...".ljust(w - 6)
+            safe_addstr(stdscr, start_y + h - 2, start_x + 3, installing_str[: w - 6], title_attr)
+            stdscr.refresh()
+            import subprocess
+            import sys
+            try:
+                res = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", package_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if res.returncode == 0:
+                    ok_str = f"Installed {package_name} successfully!".ljust(w - 6)
+                    safe_addstr(stdscr, start_y + h - 2, start_x + 3, ok_str[: w - 6], active_teal)
+                    stdscr.refresh()
+                    curses.napms(800)
+                    return True
+                else:
+                    err_hint = f"pip install failed (code {res.returncode}). Press any key."
+                    safe_addstr(stdscr, start_y + h - 2, start_x + 3, err_hint[: w - 6], action_attr)
+                    stdscr.refresh()
+                    stdscr.getch()
+            except Exception as pe:
+                err_hint = f"Error: {pe}"[: w - 6]
+                safe_addstr(stdscr, start_y + h - 2, start_x + 3, err_hint, action_attr)
+                stdscr.refresh()
+                stdscr.getch()
+            return False
+        elif k in (10, 13, 32, 27, ord("q"), ord("Q")):
+            return False
+    return False
 
 
 def show_message_dialog(
@@ -520,7 +552,7 @@ def draw_box_panel(
     curr_x = x + 3 + len(title_text)
     if subtitle:
         sub_text = f"[{subtitle}] "
-        safe_addstr(win, y, curr_x, sub_text, (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        safe_addstr(win, y, curr_x, sub_text, (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
         curr_x += len(sub_text)
     avail_line = max(0, (x + w - 1) - curr_x)
     if avail_line > 0:
@@ -536,12 +568,12 @@ def draw_box_panel(
 
 
 def draw_button(win: curses.window, y: int, x: int, label: str, is_focused: bool = False) -> None:
-    """Draw an interactive button with Norton Commander input background or modern active teal."""
+    """Draw an interactive button with deep blue background and active white font."""
     btn_str = f"[ {label} ]"
     if is_focused:
-        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     else:
-        attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        attr = get_color(COLOR_INPUT_NORMAL) if safe_has_colors() else 0
     safe_addstr(win, y, x, btn_str, attr)
 
 
@@ -553,11 +585,11 @@ def draw_radio(
     is_checked: bool = False,
     is_focused: bool = False,
 ) -> None:
-    """Draw an interactive radio button option with Norton Commander input background or modern active teal."""
+    """Draw an interactive radio button option with input field color or active focus."""
     mark = "●" if is_checked else " "
     radio_str = f"({mark}) {label}"
     if is_focused:
-        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     elif is_checked:
         attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     else:
@@ -575,9 +607,9 @@ def draw_field(
     val_width: int = 24,
     has_dropdown: bool = False,
 ) -> None:
-    """Draw a labeled form field with white inactive label and active input box."""
+    """Draw a labeled form field with deep blue background and active bright white font."""
     lbl = f"{label}: "
-    lbl_attr = (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    lbl_attr = (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     safe_addstr(win, y, x, lbl, lbl_attr)
     val_x = x + len(lbl)
 
@@ -591,10 +623,11 @@ def draw_field(
     box_str = f"[ {disp_val}{pad}{arrow} ]"
 
     if is_focused:
-        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     else:
-        attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        attr = get_color(COLOR_INPUT_NORMAL) if safe_has_colors() else 0
     safe_addstr(win, y, val_x, box_str, attr)
+
 
 
 def show_column_picker_dialog(
@@ -968,7 +1001,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
         ("F2", "Open native macOS Finder upload / dataset picker"),
         ("F3", "Open macOS Finder to choose output destination folder"),
         ("F5", "Run conversion and write train/valid/test JSONL files"),
-        ("F9 (or 9)", "Toggle color scheme (Norton Commander <-> Modern)"),
+        ("F9 / 9 / t", "Toggle color scheme (Norton Commander <-> Modern)"),
         ("r / R", "Randomize split seed"),
         ("? / F1", "Show this help screen"),
         ("F10 / q / Esc", "Exit MLX-Commander"),

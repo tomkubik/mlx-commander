@@ -26,6 +26,10 @@ try:
     HAS_DATASETS = True
 except ImportError:
     HAS_DATASETS = False
+    datasets = None
+    Dataset = None
+    DatasetDict = None
+    load_from_disk = None
 
 try:
     import pyarrow as pa
@@ -53,6 +57,176 @@ try:
 except ImportError:
     HAS_LANCE = False
     lance = None
+
+
+def ensure_pyarrow() -> bool:
+    """
+    Ensure pyarrow and its submodules are imported and ready.
+    If pyarrow was installed while the application was running, this re-attempts
+    the import and updates global references dynamically so datasets open seamlessly.
+    """
+    global HAS_PYARROW, pa, ds, pa_ipc, pq
+    if HAS_PYARROW and pq is not None:
+        return True
+    try:
+        import pyarrow as _pa
+        import pyarrow.dataset as _ds
+        import pyarrow.ipc as _pa_ipc
+        import pyarrow.parquet as _pq
+        pa = _pa
+        ds = _ds
+        pa_ipc = _pa_ipc
+        pq = _pq
+        HAS_PYARROW = True
+        return True
+    except ImportError:
+        HAS_PYARROW = False
+        return False
+
+
+def ensure_duckdb() -> bool:
+    """Ensure duckdb is imported and ready dynamically."""
+    global HAS_DUCKDB, duckdb
+    if HAS_DUCKDB and duckdb is not None:
+        return True
+    try:
+        import duckdb as _duckdb
+        duckdb = _duckdb
+        HAS_DUCKDB = True
+        return True
+    except ImportError:
+        HAS_DUCKDB = False
+        return False
+
+
+def ensure_lance() -> bool:
+    """Ensure lance is imported and ready dynamically."""
+    global HAS_LANCE, lance
+    if HAS_LANCE and lance is not None:
+        return True
+    try:
+        import lance as _lance
+        lance = _lance
+        HAS_LANCE = True
+        return True
+    except ImportError:
+        HAS_LANCE = False
+        return False
+
+
+def ensure_datasets() -> bool:
+    """Ensure datasets is imported and ready dynamically."""
+    global HAS_DATASETS, datasets, Dataset, DatasetDict, load_from_disk
+    if HAS_DATASETS and datasets is not None:
+        return True
+    try:
+        import datasets as _datasets
+        from datasets import Dataset as _Dataset, DatasetDict as _DatasetDict, load_from_disk as _load_from_disk
+        datasets = _datasets
+        Dataset = _Dataset
+        DatasetDict = _DatasetDict
+        load_from_disk = _load_from_disk
+        HAS_DATASETS = True
+        return True
+    except ImportError:
+        HAS_DATASETS = False
+        return False
+
+
+# Magic byte signatures for binary formats
+PARQUET_MAGIC = b"PAR1"
+ARROW_IPC_FILE_MAGIC = b"ARROW1"
+SQLITE_MAGIC = b"SQLite format 3\x00"
+PARQUET_EXTS = (".parquet", ".pq", ".parq")
+
+
+def is_parquet_file(file_path: Path) -> bool:
+    """
+    Check if a file is a Parquet file by extension or magic bytes (PAR1).
+    Guarantees reliable detection even if file has an alternative extension
+    (.pq, .parq, .parquet.snappy, .snappy) or no extension at all.
+    """
+    if not file_path.is_file():
+        return False
+    name_lower = file_path.name.lower()
+    if any(name_lower.endswith(ext) for ext in PARQUET_EXTS) or ".parquet." in name_lower:
+        return True
+    try:
+        with open(file_path, "rb") as f:
+            header = f.read(4)
+            if header == PARQUET_MAGIC:
+                return True
+    except (OSError, PermissionError):
+        pass
+    return False
+
+
+def is_arrow_file(file_path: Path) -> bool:
+    """Check if file is an Arrow IPC file by extension or magic bytes."""
+    if not file_path.is_file():
+        return False
+    if file_path.name.lower().endswith(".arrow"):
+        return True
+    try:
+        with open(file_path, "rb") as f:
+            header = f.read(6)
+            if header == ARROW_IPC_FILE_MAGIC:
+                return True
+    except (OSError, PermissionError):
+        pass
+    return False
+
+
+def is_sqlite_file(file_path: Path) -> bool:
+    """Check if file is a SQLite database file by extension or magic bytes."""
+    if not file_path.is_file():
+        return False
+    if any(file_path.name.lower().endswith(ext) for ext in (".sqlite", ".db", ".sqlite3")):
+        return True
+    try:
+        with open(file_path, "rb") as f:
+            header = f.read(16)
+            if header == SQLITE_MAGIC:
+                return True
+    except (OSError, PermissionError):
+        pass
+    return False
+
+
+def is_parquet_dir(dir_path: Path) -> bool:
+    """
+    Check if directory contains Parquet dataset files (root level or common subfolders).
+    """
+    if not dir_path.is_dir():
+        return False
+    try:
+        # Check root level
+        for f in dir_path.iterdir():
+            if f.is_file():
+                name_l = f.name.lower()
+                if any(name_l.endswith(ext) for ext in PARQUET_EXTS) or ".parquet." in name_l:
+                    return True
+                if f.stat().st_size >= 4:
+                    with open(f, "rb") as bf:
+                        if bf.read(4) == PARQUET_MAGIC:
+                            return True
+
+        # Check common subdirectories like data/, train/, test/
+        for sub in ("data", "train", "test", "valid", "validation", "dev"):
+            sub_dir = dir_path / sub
+            if sub_dir.is_dir():
+                for f in sub_dir.iterdir():
+                    if f.is_file():
+                        name_l = f.name.lower()
+                        if any(name_l.endswith(ext) for ext in PARQUET_EXTS) or ".parquet." in name_l:
+                            return True
+                        if f.stat().st_size >= 4:
+                            with open(f, "rb") as bf:
+                                if bf.read(4) == PARQUET_MAGIC:
+                                    return True
+    except (OSError, PermissionError):
+        pass
+    return False
 
 
 @dataclass
@@ -174,32 +348,46 @@ def inspect_dataset_path(path_input: Union[str, Path, List[Union[str, Path]]]) -
 
 def load_from_json_or_jsonl(file_path: Path) -> List[Dict[str, Any]]:
     """Load JSON lines or standard JSON array from file."""
-    records: List[Dict[str, Any]] = []
-    with open(file_path, "r", encoding="utf-8") as f:
-        # Check first non-whitespace char
-        pos = f.tell()
-        first_char = f.read(1)
-        while first_char and first_char.isspace():
-            first_char = f.read(1)
-        f.seek(pos)
+    if is_parquet_file(file_path):
+        return load_from_parquet_file(file_path)
+    if is_arrow_file(file_path):
+        return load_from_arrow_file(file_path)
 
-        if first_char == "[":
-            # JSON array
-            data = json.load(f)
-            if isinstance(data, list):
-                records = [d for d in data if isinstance(d, dict)]
-        else:
-            # JSONL
-            for line in f:
-                line_str = line.strip()
-                if line_str:
-                    try:
-                        obj = json.loads(line_str)
-                        if isinstance(obj, dict):
-                            records.append(obj)
-                    except json.JSONDecodeError:
-                        continue
-    return records
+    records: List[Dict[str, Any]] = []
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            # Check first non-whitespace char
+            pos = f.tell()
+            first_char = f.read(1)
+            while first_char and first_char.isspace():
+                first_char = f.read(1)
+            f.seek(pos)
+
+            if first_char == "[":
+                # JSON array
+                data = json.load(f)
+                if isinstance(data, list):
+                    records = [d for d in data if isinstance(d, dict)]
+            else:
+                # JSONL
+                for line in f:
+                    line_str = line.strip()
+                    if line_str:
+                        try:
+                            obj = json.loads(line_str)
+                            if isinstance(obj, dict):
+                                records.append(obj)
+                        except json.JSONDecodeError:
+                            continue
+        return records
+    except UnicodeDecodeError as ue:
+        if is_parquet_file(file_path):
+            return load_from_parquet_file(file_path)
+        if is_arrow_file(file_path):
+            return load_from_arrow_file(file_path)
+        raise ValueError(
+            f"File '{file_path.name}' contains binary or non-UTF-8 data ({ue}) and cannot be loaded as JSON/JSONL."
+        )
 
 
 def load_from_csv(file_path: Path) -> List[Dict[str, Any]]:
@@ -363,7 +551,7 @@ def load_from_duckdb(
     - Single table database auto-loading.
     - Multi-table schema matching auto-splitting.
     """
-    if not HAS_DUCKDB:
+    if not ensure_duckdb() or not HAS_DUCKDB:
         raise MissingDependencyError(
             format_name="DuckDB",
             package_name="duckdb",
@@ -588,7 +776,7 @@ def load_from_webdataset(
 
 def load_from_arrow_file(file_path: Path) -> List[Dict[str, Any]]:
     """Load records from an Apache Arrow IPC stream/file."""
-    if not HAS_PYARROW:
+    if not ensure_pyarrow() or not HAS_PYARROW:
         raise MissingDependencyError(
             format_name="Apache Arrow",
             package_name="pyarrow",
@@ -611,7 +799,7 @@ def load_from_arrow_file(file_path: Path) -> List[Dict[str, Any]]:
 
 def load_from_parquet_file(file_path: Path) -> List[Dict[str, Any]]:
     """Load records from a Parquet file using pyarrow."""
-    if not HAS_PYARROW:
+    if not ensure_pyarrow() or not HAS_PYARROW:
         raise MissingDependencyError(
             format_name="Parquet",
             package_name="pyarrow",
@@ -628,7 +816,7 @@ def load_from_parquet_file(file_path: Path) -> List[Dict[str, Any]]:
 
 def load_from_parquet_dir(dir_path: Path) -> List[Dict[str, Any]]:
     """Load records from a directory of Parquet files (sharded dataset) using pyarrow.dataset."""
-    if not HAS_PYARROW:
+    if not ensure_pyarrow() or not HAS_PYARROW:
         raise MissingDependencyError(
             format_name="Parquet",
             package_name="pyarrow",
@@ -637,7 +825,13 @@ def load_from_parquet_dir(dir_path: Path) -> List[Dict[str, Any]]:
             extra_name="parquet",
         )
     try:
-        dataset = ds.dataset(str(dir_path), format="parquet")
+        target_dir = dir_path
+        # If no parquet files in root but exists in data/ subdirectory
+        if not any(f.name.lower().endswith(PARQUET_EXTS) for f in dir_path.iterdir() if f.is_file()):
+            data_sub = dir_path / "data"
+            if data_sub.is_dir():
+                target_dir = data_sub
+        dataset = ds.dataset(str(target_dir), format="parquet")
         table = dataset.to_table()
         return table.to_pylist()
     except Exception as e:
@@ -657,7 +851,7 @@ def is_lance_dir(path: Path) -> bool:
 
 def load_from_lance(dir_path: Path) -> List[Dict[str, Any]]:
     """Load records from a Lance dataset directory (.lance)."""
-    if not HAS_LANCE:
+    if not ensure_lance() or not HAS_LANCE:
         raise MissingDependencyError(
             format_name="Lance",
             package_name="pylance",
@@ -742,7 +936,11 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
         ext = file_path.suffix.lower()
         full_ext = "".join(file_path.suffixes).lower()
 
-        if ext in (".json", ".jsonl"):
+        if is_parquet_file(file_path):
+            raw_splits["default"] = load_from_parquet_file(file_path)
+        elif is_arrow_file(file_path):
+            raw_splits["default"] = load_from_arrow_file(file_path)
+        elif ext in (".json", ".jsonl"):
             raw_splits["default"] = load_from_json_or_jsonl(file_path)
         elif ext == ".csv":
             raw_splits["default"] = load_from_csv(file_path)
@@ -750,13 +948,9 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
             raw_splits["default"] = load_from_tsv(file_path)
         elif ext in (".txt", ".text"):
             raw_splits["default"] = load_from_text(file_path)
-        elif ext == ".parquet":
-            raw_splits["default"] = load_from_parquet_file(file_path)
-        elif ext == ".arrow":
-            raw_splits["default"] = load_from_arrow_file(file_path)
         elif ext in (".duckdb", ".ddb"):
             raw_splits, is_split = load_from_duckdb(file_path, table_name=table_name)
-        elif ext in (".sqlite", ".db", ".sqlite3") or table_name is not None:
+        elif is_sqlite_file(file_path) or table_name is not None:
             raw_splits, is_split = load_from_sqlite(file_path, table_name=table_name)
         elif any(full_ext.endswith(tar_ext) for tar_ext in (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz")):
             raw_splits, is_split = load_from_webdataset(file_path)
@@ -790,7 +984,7 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
                 # Check for standard split files in the root dir: train.jsonl, test.jsonl, etc.
                 found_split_files = False
                 split_exts = [
-                    ".jsonl", ".parquet", ".arrow", ".json", ".csv",
+                    ".jsonl", ".parquet", ".pq", ".parq", ".arrow", ".json", ".csv",
                     ".tsv", ".tab", ".txt", ".text", ".duckdb", ".ddb",
                     ".sqlite", ".db", ".sqlite3",
                     ".tar", ".tar.gz", ".tgz",
@@ -800,7 +994,11 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
                         candidate = file_path / f"{s}{ext}"
                         if candidate.exists():
                             found_split_files = True
-                            if ext in (".json", ".jsonl"):
+                            if ext in (".parquet", ".pq", ".parq"):
+                                raw_splits[s] = load_from_parquet_file(candidate)
+                            elif ext == ".arrow":
+                                raw_splits[s] = load_from_arrow_file(candidate)
+                            elif ext in (".json", ".jsonl"):
                                 raw_splits[s] = load_from_json_or_jsonl(candidate)
                             elif ext == ".csv":
                                 raw_splits[s] = load_from_csv(candidate)
@@ -808,10 +1006,6 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
                                 raw_splits[s] = load_from_tsv(candidate)
                             elif ext in (".txt", ".text"):
                                 raw_splits[s] = load_from_text(candidate)
-                            elif ext == ".parquet":
-                                raw_splits[s] = load_from_parquet_file(candidate)
-                            elif ext == ".arrow":
-                                raw_splits[s] = load_from_arrow_file(candidate)
                             elif ext in (".duckdb", ".ddb"):
                                 db_splits, _ = load_from_duckdb(candidate)
                                 raw_splits[s] = db_splits.get("default", list(db_splits.values())[0] if db_splits else [])
@@ -824,15 +1018,14 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
                             break
 
                 if not found_split_files:
-                    # Check for sharded Parquet dataset directory
-                    parquet_shards = sorted(list(file_path.glob("*.parquet")))
-                    if parquet_shards:
+                    # Check for sharded Parquet dataset directory (in root or subfolder)
+                    if is_parquet_dir(file_path):
                         raw_splits["default"] = load_from_parquet_dir(file_path)
                     else:
                         # Aggregate all data files in the directory
                         all_records: List[Dict[str, Any]] = []
                         supported_exts = (
-                            ".jsonl", ".json", ".parquet", ".arrow", ".csv",
+                            ".jsonl", ".json", ".parquet", ".pq", ".parq", ".arrow", ".csv",
                             ".tsv", ".tab", ".txt", ".text", ".duckdb", ".ddb",
                             ".sqlite", ".db", ".sqlite3",
                             ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz",
@@ -843,7 +1036,11 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
                         ])
                         for df in data_files:
                             fname = df.name.lower()
-                            if fname.endswith((".json", ".jsonl")):
+                            if is_parquet_file(df):
+                                all_records.extend(load_from_parquet_file(df))
+                            elif is_arrow_file(df):
+                                all_records.extend(load_from_arrow_file(df))
+                            elif fname.endswith((".json", ".jsonl")):
                                 all_records.extend(load_from_json_or_jsonl(df))
                             elif fname.endswith(".csv"):
                                 all_records.extend(load_from_csv(df))
@@ -851,10 +1048,6 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
                                 all_records.extend(load_from_tsv(df))
                             elif fname.endswith((".txt", ".text")):
                                 all_records.extend(load_from_text(df))
-                            elif fname.endswith(".parquet"):
-                                all_records.extend(load_from_parquet_file(df))
-                            elif fname.endswith(".arrow"):
-                                all_records.extend(load_from_arrow_file(df))
                             elif fname.endswith((".duckdb", ".ddb")):
                                 db_splits, _ = load_from_duckdb(df)
                                 for rows in db_splits.values():

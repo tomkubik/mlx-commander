@@ -38,6 +38,16 @@ class ThemeMode(str, Enum):
     MODERN = "modern"
     NORTON = "norton"
 
+    def __str__(self) -> str:
+        return self.value
+
+    @classmethod
+    def is_norton(cls, mode: Any) -> bool:
+        if isinstance(mode, cls):
+            return mode == cls.NORTON
+        val = getattr(mode, "value", str(mode))
+        return "norton" in str(val).lower() or str(val).lower().strip() in ("nc", "blue", "classic")
+
 
 @dataclass
 class CommanderState:
@@ -234,11 +244,12 @@ class CommanderState:
 
     def toggle_theme(self) -> str:
         """Toggle between Modern and Norton Commander color schemes."""
-        if self.theme_mode == ThemeMode.NORTON:
+        if ThemeMode.is_norton(self.theme_mode):
             self.theme_mode = ThemeMode.MODERN
         else:
             self.theme_mode = ThemeMode.NORTON
         return self.theme_mode
+
 
     def set_format(self, fmt: MLXFormat) -> None:
         """Change MLX target format and re-detect mappings if appropriate."""

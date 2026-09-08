@@ -17,7 +17,7 @@ import json
 import os
 import textwrap
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from mlx_commander.converter import ConversionResult, convert_and_save
 from mlx_commander.formats import (
@@ -41,6 +41,7 @@ from mlx_commander.tui.widgets import (
     COLOR_NORMAL_TEXT,
     COLOR_ERROR,
     COLOR_TITLE_ACCENT,
+    COLOR_LABEL_GRAY,
     COLOR_INPUT_NORMAL,
     COLOR_INPUT_FOCUSED,
     COLOR_FN_NUMBER,
@@ -67,62 +68,95 @@ from mlx_commander.tui.widgets import (
 )
 
 
-def init_colors(theme_mode: str = "modern") -> None:
+def init_nc_palette() -> Tuple[int, int, int, int, int, int, int]:
+    """
+    Configure and return Norton Commander VGA color indices:
+      - Background Blue: #0000AA (Classic VGA Blue)
+      - Highlight / Cyan: #00AAAA (Cyan)
+      - Main Text / White: #FFFFFF (Bright White)
+      - Label / Light Gray: #AAAAAA (Light Gray)
+      - Cursor / Yellow: #FFFF55 (Bright Yellow)
+      - Prompt / Black: #000000 (Black)
+      - Inactive Input Ice Blue: #55FFFF (Bright Cyan / Ice Blue)
+    """
+    if curses.can_change_color():
+        # Exact RGB on 0..1000 curses scale
+        curses.init_color(20, 0, 0, 666)         # #0000AA (Classic VGA Blue)
+        curses.init_color(21, 0, 666, 666)       # #00AAAA (Cyan)
+        curses.init_color(22, 1000, 1000, 1000)  # #FFFFFF (Bright White)
+        curses.init_color(23, 666, 666, 666)     # #AAAAAA (Light Gray)
+        curses.init_color(24, 1000, 1000, 333)   # #FFFF55 (Bright Yellow)
+        curses.init_color(25, 0, 0, 0)           # #000000 (Black)
+        curses.init_color(26, 333, 1000, 1000)   # #55FFFF (Ice Blue / Bright Cyan)
+        return 20, 21, 22, 23, 24, 25, 26
+    elif curses.COLORS >= 256:
+        # Closest 256-color palette slots:
+        # 19: #0000af (Blue), 37: #00afaf (Cyan), 15: #ffffff (White),
+        # 248: #a8a8a8 (Light Gray), 227: #ffff5f (Yellow), 0: #000000 (Black), 51: #00ffff (Ice Blue)
+        return 19, 37, 15, 248, 227, 0, 51
+    else:
+        # 16-color standard ANSI fallback
+        return (
+            curses.COLOR_BLUE,
+            curses.COLOR_CYAN,
+            curses.COLOR_WHITE,
+            curses.COLOR_WHITE,
+            curses.COLOR_YELLOW,
+            curses.COLOR_BLACK,
+            curses.COLOR_CYAN,
+        )
+
+
+def init_colors(theme_mode: Any = "modern") -> None:
     """Initialize curses color pairs for Modern or Norton Commander color schemes."""
     if not curses.has_colors():
         return
     curses.start_color()
-    is_norton = (str(theme_mode).lower().strip() in ("norton", "nc", "blue", "classic"))
+    is_norton = ThemeMode.is_norton(theme_mode)
 
     if is_norton:
-        # Norton Commander Classic EGA/VGA Palette
-        # Pair 1: Top Header Banner (Black on Cyan)
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        # Pair 2: Light Blue / Bright Cyan Joints & Borders on Deep Blue
-        curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLUE)
-        # Pair 3: Success / Checked on Deep Blue
-        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLUE)
-        # Pair 4: Normal Text & Inactive Labels on Deep Blue
-        curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLUE)
-        # Pair 5: Error / Alerts (White on Red - classic Norton red box)
-        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_RED)
-        # Pair 6: Panel Titles & Accents (Yellow on Deep Blue)
-        curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_BLUE)
-        # Pair 7: User Toggleable Inputs & Buttons (Black on Cyan background)
-        curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        # Pair 8: User Toggleable Input Focused (White on Black)
-        curses.init_pair(8, curses.COLOR_WHITE, curses.COLOR_BLACK)
-        # Pair 9: Function Key Number (White on Black)
-        curses.init_pair(9, curses.COLOR_WHITE, curses.COLOR_BLACK)
-        # Pair 10: Function Key Label (Black on Cyan)
-        curses.init_pair(10, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        # Pair 11: Deep Blue Screen / Panel Background Fill
-        curses.init_pair(11, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        c_blue, c_cyan, c_white, c_gray, c_yellow, c_black, c_ice_blue = init_nc_palette()
+        # Norton Commander Classic EGA/VGA Palette:
+        # Pair 1: Top Header Banner (Prompt / Black on Highlight / Cyan)
+        curses.init_pair(COLOR_BANNER, c_black, c_cyan)
+        # Pair 2: Highlight / Cyan Joints & Borders on Background Blue
+        curses.init_pair(COLOR_BORDER_JOINTS, c_cyan, c_blue)
+        # Pair 3: Success / Checked on Background Blue
+        curses.init_pair(COLOR_SUCCESS, curses.COLOR_GREEN, c_blue)
+        # Pair 4: Main Text / White (Standard file names and UI text) on Background Blue
+        curses.init_pair(COLOR_NORMAL_TEXT, c_white, c_blue)
+        # Pair 5: Error / Alerts (Main Text White on Red)
+        curses.init_pair(COLOR_ERROR, c_white, curses.COLOR_RED)
+        # Pair 6: Cursor / Yellow (Panel titles & accents) on Background Blue
+        curses.init_pair(COLOR_TITLE_ACCENT, c_yellow, c_blue)
+        # Pair 7: Label / Light Gray (Inactive elements, background text) on Background Blue
+        curses.init_pair(COLOR_LABEL_GRAY, c_gray, c_blue)
+        # Pair 8: User Inputs / Inactive Fields (Ice Blue on Deep Blue background)
+        curses.init_pair(COLOR_INPUT_NORMAL, c_ice_blue, c_blue)
+        # Pair 9: Active / Focused Field (Prompt / Black on Highlight / Cyan background)
+        curses.init_pair(COLOR_INPUT_FOCUSED, c_black, c_cyan)
+        # Pair 10: Function Key Number (White on Black)
+        curses.init_pair(COLOR_FN_NUMBER, c_white, c_black)
+        # Pair 11: Function Key Label (Black on Cyan)
+        curses.init_pair(COLOR_FN_LABEL, c_black, c_cyan)
+        # Pair 12: Background Blue (Panel/Window Fill: #0000AA)
+        curses.init_pair(COLOR_PANEL_BG, c_white, c_blue)
     else:
         # Modern Dark Theme
         curses.use_default_colors()
-        # Pair 1: Header Banner (White on Blue or Default)
-        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
-        # Pair 2: Active / Teal / Border
-        curses.init_pair(2, curses.COLOR_CYAN, -1)
-        # Pair 3: Success / Green
-        curses.init_pair(3, curses.COLOR_GREEN, -1)
-        # Pair 4: Normal Text / Labels (White)
-        curses.init_pair(4, curses.COLOR_WHITE, -1)
-        # Pair 5: Error / Alerts (Red)
-        curses.init_pair(5, curses.COLOR_RED, -1)
-        # Pair 6: Panel Titles / Accent (White in modern)
-        curses.init_pair(6, curses.COLOR_WHITE, -1)
-        # Pair 7: User Toggleable Inputs & Buttons (Teal)
-        curses.init_pair(7, curses.COLOR_CYAN, -1)
-        # Pair 8: User Toggleable Input Focused (Teal Standout)
-        curses.init_pair(8, curses.COLOR_CYAN, -1)
-        # Pair 9: Function Key Number
-        curses.init_pair(9, curses.COLOR_WHITE, -1)
-        # Pair 10: Function Key Label
-        curses.init_pair(10, curses.COLOR_CYAN, -1)
-        # Pair 11: Panel Fill
-        curses.init_pair(11, curses.COLOR_WHITE, -1)
+        curses.init_pair(COLOR_BANNER, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        curses.init_pair(COLOR_BORDER_JOINTS, curses.COLOR_CYAN, -1)
+        curses.init_pair(COLOR_SUCCESS, curses.COLOR_GREEN, -1)
+        curses.init_pair(COLOR_NORMAL_TEXT, curses.COLOR_WHITE, -1)
+        curses.init_pair(COLOR_ERROR, curses.COLOR_RED, -1)
+        curses.init_pair(COLOR_TITLE_ACCENT, curses.COLOR_WHITE, -1)
+        curses.init_pair(COLOR_LABEL_GRAY, curses.COLOR_WHITE, -1)
+        curses.init_pair(COLOR_INPUT_NORMAL, curses.COLOR_CYAN, -1)
+        curses.init_pair(COLOR_INPUT_FOCUSED, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(COLOR_FN_NUMBER, curses.COLOR_WHITE, -1)
+        curses.init_pair(COLOR_FN_LABEL, curses.COLOR_CYAN, -1)
+        curses.init_pair(COLOR_PANEL_BG, curses.COLOR_WHITE, -1)
+
 
 
 def execute_conversion(stdscr: curses.window, state: CommanderState) -> Optional[ConversionResult]:
@@ -183,7 +217,7 @@ def run_commander_tui(
         state.apply_prefill(prefill)
 
     init_colors(state.theme_mode)
-    if state.theme_mode == ThemeMode.NORTON:
+    if ThemeMode.is_norton(state.theme_mode):
         try:
             stdscr.bkgd(" ", get_color(COLOR_PANEL_BG))
         except curses.error:
@@ -219,7 +253,8 @@ def run_commander_tui(
             if has_dataset:
                 loaded = state.load_dataset(str(p))
                 if not loaded and state.last_missing_dependency:
-                    show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
+                    if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
+                        state.load_dataset(str(p))
             else:
                 state.dataset_path = str(p)
                 if not state.has_custom_output_dir:
@@ -263,12 +298,12 @@ def run_commander_tui(
         # ----------------------------------------------------
         hdr_attr = (get_color(COLOR_BANNER) | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
         safe_addstr(stdscr, 0, 0, " " * max_x, hdr_attr)
-        if state.theme_mode == ThemeMode.NORTON:
+        if ThemeMode.is_norton(state.theme_mode):
             safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Norton Commander Classic Mode", hdr_attr)
-            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9: Scheme | F10: Exit]" if max_x >= 92 else "[F1: Help | F9: Scheme]"
+            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9/9/t: Scheme | F10: Exit]" if max_x >= 96 else "[F1: Help | F9/t: Scheme]"
         else:
             safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
-            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9: Scheme | F10: Exit]" if max_x >= 96 else "[F1: Help | F10: Exit]"
+            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9/9/t: Scheme | F10: Exit]" if max_x >= 98 else "[F1: Help | F10: Exit]"
         safe_addstr(stdscr, 0, max(2, max_x - len(hint_str) - 2), hint_str, hdr_attr)
 
         # ----------------------------------------------------
@@ -314,30 +349,34 @@ def run_commander_tui(
         max_path_w = left_w - 10
         if len(disp_path) > max_path_w:
             disp_path = "…" + disp_path[-(max_path_w - 1):]
-        safe_addstr(stdscr, 2, 2, "Path: ", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        safe_addstr(stdscr, 2, 8, disp_path[:max_path_w], (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, 2, 2, "Path: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 2, 8, disp_path[:max_path_w], get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else curses.A_DIM)
 
         # Action Buttons (stacked vertically)
         f2_focus = is_left and state.left_focus_idx == 0
         edit_focus = is_left and state.left_focus_idx == 1
         draw_button(stdscr, 3, 2, "Finder (F2)", is_focused=f2_focus)
         draw_button(stdscr, 4, 2, "Change Path", is_focused=edit_focus)
-        safe_addstr(stdscr, 5, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, 5, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
 
         # Dataset Stats
         if state.loaded_dataset:
             ds = state.loaded_dataset
-            safe_addstr(stdscr, 6, 2, f"Rows: {ds.total_rows:,}  |  Splits: {len(ds.split_names)}", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, 6, 2, "Rows: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, 6, 8, f"{ds.total_rows:,}  ", get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0)
+            splits_x = 8 + len(f"{ds.total_rows:,}  ")
+            safe_addstr(stdscr, 6, splits_x, "Splits: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, 6, splits_x + 8, f"{len(ds.split_names)}", get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0)
             split_summary = ", ".join(f"{s}: {ds.split_counts.get(s, 0):,}" for s in ds.split_names[:3])
-            safe_addstr(stdscr, 7, 2, f"Found: [{split_summary}]", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+            safe_addstr(stdscr, 7, 2, f"Found: [{split_summary}]", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
             cols = ds.columns
         else:
-            safe_addstr(stdscr, 6, 2, "No dataset loaded.", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-            safe_addstr(stdscr, 7, 2, "Use Finder (F2) or Change Path.", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+            safe_addstr(stdscr, 6, 2, "No dataset loaded.", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, 7, 2, "Use Finder (F2) or Change Path.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
             cols = []
 
         # Available Columns List
-        safe_addstr(stdscr, 8, 2, f"Columns ({len(cols)}):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 8, 2, f"Columns ({len(cols)}):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         col_list_focus = is_left and state.left_focus_idx == 2
         col_list_start_y = 9
         col_list_rows = max(1, panel_h - 11)
@@ -358,9 +397,9 @@ def run_commander_tui(
                     prefix = " ▶ " if is_col_sel else "   "
                     text = f"{prefix}{c_idx + 1}. {c_name}"[:left_w - 4]
                     if is_col_sel:
-                        c_attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
+                        c_attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
                     elif col_list_focus:
-                        c_attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+                        c_attr = (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
                     else:
                         c_attr = get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0
                     safe_addstr(stdscr, row_y, 2, text, c_attr)
@@ -371,10 +410,11 @@ def run_commander_tui(
                 sample_val = str(state.loaded_dataset.sample_records[0].get(col_name, ""))
                 if len(sample_val) > left_w - 12:
                     sample_val = sample_val[:left_w - 13] + "…"
-                safe_addstr(stdscr, panel_h - 1, 2, "Sample: ", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-                safe_addstr(stdscr, panel_h - 1, 10, sample_val, (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+                safe_addstr(stdscr, panel_h - 1, 2, "Sample: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+                safe_addstr(stdscr, panel_h - 1, 10, sample_val, get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else curses.A_DIM)
         else:
-            safe_addstr(stdscr, col_list_start_y, 4, "(Load dataset to view schema)", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+            safe_addstr(stdscr, col_list_start_y, 4, "(Load dataset to view schema)", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
+
 
         # ----------------------------------------------------
         # 3. Right Panel: MLX Format, Mappings & Splits
@@ -396,7 +436,7 @@ def run_commander_tui(
             state.right_focus_idx = total_right_fields - 1
 
         # Fields 0..3: Target Format Radios (stacked vertically, one under another)
-        safe_addstr(stdscr, 2, left_w + 2, "Format (MLX Target):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 2, left_w + 2, "Format (MLX Target):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         format_options = [
             (MLXFormat.PROMPT_COMPLETION, "prompt_comp (Q&A)", "prompt_comp"),
             (MLXFormat.CHAT, "chat (Dialogue / Messages)", "chat"),
@@ -411,7 +451,7 @@ def run_commander_tui(
             draw_radio(stdscr, row_y, left_w + 4, lbl_text, is_checked=is_chk, is_focused=is_foc)
 
         # Fields 4..(3 + len(mapping_fields)): Column Mappings
-        safe_addstr(stdscr, 7, left_w + 2, "Column Mappings [Press Enter]:", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 7, left_w + 2, "Column Mappings [Press Enter]:", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         for idx, f_info in enumerate(mapping_fields):
             row_y = 8 + idx
             is_f_focused = is_right and (state.right_focus_idx == 4 + idx)
@@ -434,7 +474,7 @@ def run_commander_tui(
         valid_focus = is_right and state.right_focus_idx == 5 + len(mapping_fields)
         test_focus = is_right and state.right_focus_idx == 6 + len(mapping_fields)
 
-        safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         draw_field(stdscr, splits_start_y, left_w + 14, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=6)
         draw_field(stdscr, splits_start_y, left_w + 27, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=6)
         draw_field(stdscr, splits_start_y, left_w + 40, "Test", f"{state.test_pct:.0f}%", is_focused=test_focus, val_width=6)
@@ -484,9 +524,9 @@ def run_commander_tui(
 
         if state.preview_error:
             safe_addstr(stdscr, preview_y + 1, 3, f"[!] {state.preview_error}", get_color(5) | curses.A_BOLD)
-            safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+            safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
         elif not state.preview_cache:
-            safe_addstr(stdscr, preview_y + 1, 3, "(No records to preview)", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+            safe_addstr(stdscr, preview_y + 1, 3, "(No records to preview)", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
         else:
             avail_w = max(20, max_x - 10)
             avail_rows = max(1, preview_h - 2)
@@ -539,18 +579,19 @@ def run_commander_tui(
                             line_text = line_text + " ...}"
 
                     if line_idx == 0:
-                        safe_addstr(stdscr, curr_row, 3, f"{i + 1}: ", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-                        safe_addstr(stdscr, curr_row, 6, line_text, (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+                        safe_addstr(stdscr, curr_row, 3, f"{i + 1}: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+                        safe_addstr(stdscr, curr_row, 6, line_text, (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
                     else:
                         # Continuation line indented
-                        safe_addstr(stdscr, curr_row, 6, line_text, get_color(4) if curses.has_colors() else 0)
+                        safe_addstr(stdscr, curr_row, 6, line_text, get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0)
                     curr_row += 1
+
 
         # ----------------------------------------------------
         # 6. Bottom Status / Hotkey Bar
         # ----------------------------------------------------
         footer_y = max_y - 1
-        if state.theme_mode == ThemeMode.NORTON:
+        if ThemeMode.is_norton(state.theme_mode):
             # Classic Norton Commander Function Key Bar:
             # 1 Help  2 Open  3 Output  5 Convert  9 Scheme  10 Exit
             fn_items = [
@@ -618,7 +659,8 @@ def run_commander_tui(
                 if chosen:
                     if not state.load_dataset(chosen):
                         if state.last_missing_dependency:
-                            show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
+                            if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
+                                state.load_dataset(chosen)
                         else:
                             show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
 
@@ -661,10 +703,10 @@ def run_commander_tui(
             elif key in (ord("r"), ord("R")):
                 state.randomize_seed()
 
-            elif key in (curses.KEY_F9, ord("9")):
+            elif key in (curses.KEY_F9, ord("9"), ord("t"), ord("T")):
                 state.toggle_theme()
                 init_colors(state.theme_mode)
-                if state.theme_mode == ThemeMode.NORTON:
+                if ThemeMode.is_norton(state.theme_mode):
                     try:
                         stdscr.bkgd(" ", get_color(COLOR_PANEL_BG))
                     except curses.error:
@@ -677,26 +719,49 @@ def run_commander_tui(
                         pass
                     state.status_message = "Theme: Modern Terminal"
                 state.status_is_error = False
+                try:
+                    stdscr.touchwin()
+                except curses.error:
+                    pass
                 stdscr.clear()
 
             elif key in (9, curses.KEY_BTAB):  # Tab / Shift-Tab
                 state.active_panel = ActivePanel.RIGHT if state.active_panel == ActivePanel.LEFT else ActivePanel.LEFT
 
-            # Navigation in Left Panel
+            # Navigation in Left Panel (Tab 1)
             elif is_left:
+                num_cols = len(state.loaded_dataset.columns) if (state.loaded_dataset and state.loaded_dataset.columns) else 0
                 # Left arrow acts like Up arrow (switches UP)
                 if key in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
                     if state.left_focus_idx == 2 and state.selected_column_idx > 0:
                         state.selected_column_idx -= 1
-                    else:
-                        state.left_focus_idx = max(0, state.left_focus_idx - 1)
+                    elif state.left_focus_idx == 2:
+                        state.left_focus_idx = 1
+                    elif state.left_focus_idx == 1:
+                        state.left_focus_idx = 0
+                    elif state.left_focus_idx == 0:
+                        # Wrap UP to bottom of Tab 2 (Right Panel)
+                        state.active_panel = ActivePanel.RIGHT
+                        state.right_focus_idx = total_right_fields - 1
                 # Right arrow acts like Down arrow (switches DOWN)
                 elif key in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
-                    if state.left_focus_idx == 2:
-                        if state.loaded_dataset and state.selected_column_idx < len(state.loaded_dataset.columns) - 1:
+                    if state.left_focus_idx == 0:
+                        state.left_focus_idx = 1
+                    elif state.left_focus_idx == 1:
+                        if num_cols > 0:
+                            state.left_focus_idx = 2
+                            state.selected_column_idx = 0
+                        else:
+                            # No columns: scroll DOWN directly into Tab 2
+                            state.active_panel = ActivePanel.RIGHT
+                            state.right_focus_idx = 0
+                    elif state.left_focus_idx == 2:
+                        if state.selected_column_idx < num_cols - 1:
                             state.selected_column_idx += 1
-                    else:
-                        state.left_focus_idx = min(2, state.left_focus_idx + 1)
+                        else:
+                            # Reached bottom of Tab 1: scroll DOWN directly into Tab 2
+                            state.active_panel = ActivePanel.RIGHT
+                            state.right_focus_idx = 0
                 elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
                     if state.left_focus_idx == 0:  # Finder button
                         curses.def_prog_mode()
@@ -708,7 +773,8 @@ def run_commander_tui(
                         if chosen:
                             if not state.load_dataset(chosen):
                                 if state.last_missing_dependency:
-                                    show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
+                                    if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
+                                        state.load_dataset(chosen)
                                 else:
                                     show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
                     elif state.left_focus_idx == 1:  # Edit path
@@ -721,18 +787,34 @@ def run_commander_tui(
                         if new_path:
                             if not state.load_dataset(new_path):
                                 if state.last_missing_dependency:
-                                    show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
+                                    if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
+                                        state.load_dataset(new_path)
                                 else:
                                     show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
 
-            # Navigation in Right Panel
+            # Navigation in Right Panel (Tab 2)
             elif is_right:
+                num_cols = len(state.loaded_dataset.columns) if (state.loaded_dataset and state.loaded_dataset.columns) else 0
                 # Left arrow acts like Up arrow (switches UP)
                 if key in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
-                    state.right_focus_idx = (state.right_focus_idx - 1) % total_right_fields
+                    if state.right_focus_idx > 0:
+                        state.right_focus_idx -= 1
+                    else:
+                        # Reached top of Tab 2: scroll UP directly into Tab 1
+                        state.active_panel = ActivePanel.LEFT
+                        if num_cols > 0:
+                            state.left_focus_idx = 2
+                            state.selected_column_idx = num_cols - 1
+                        else:
+                            state.left_focus_idx = 1
                 # Right arrow acts like Down arrow (switches DOWN)
                 elif key in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
-                    state.right_focus_idx = (state.right_focus_idx + 1) % total_right_fields
+                    if state.right_focus_idx < total_right_fields - 1:
+                        state.right_focus_idx += 1
+                    else:
+                        # Reached bottom of Tab 2: wrap DOWN into top of Tab 1
+                        state.active_panel = ActivePanel.LEFT
+                        state.left_focus_idx = 0
 
                 elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
                     idx = state.right_focus_idx
