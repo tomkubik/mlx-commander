@@ -20,6 +20,7 @@ from mlx_commander.formats import (
     format_record,
     validate_mapping,
 )
+from mlx_commander.exceptions import MissingDependencyError
 from mlx_commander.loader import LoadedDataset, load_local_dataset
 from mlx_commander.splitter import (
     SplitConfig,
@@ -395,6 +396,12 @@ def run_interactive_wizard(
 
         try:
             dataset = load_local_dataset(target_path)
+        except MissingDependencyError as e:
+            print(f"\n{RED}Missing Dependency Error:{RESET}")
+            print(f"Format '{e.format_name}' requires package '{e.package_name}'.")
+            print(f"Install it with:\n    {e.install_command}")
+            print(f"or install optional extra:\n    {e.pip_extra}\n")
+            target_path = None
         except Exception as e:
             print(f"{RED}Error loading dataset from '{target_path}': {e}{RESET}")
             target_path = None

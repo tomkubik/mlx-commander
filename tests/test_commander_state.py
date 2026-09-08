@@ -87,6 +87,26 @@ class TestCommanderState(unittest.TestCase):
         rec0 = json.loads(state.preview_cache[0])
         self.assertEqual(rec0["prompt"], "Question 0\n\ninfo")
 
+    def test_theme_mode_toggle(self):
+        from mlx_commander.tui.state import ThemeMode
+        state = CommanderState()
+        self.assertEqual(state.theme_mode, ThemeMode.MODERN)
+        new_theme = state.toggle_theme()
+        self.assertEqual(new_theme, ThemeMode.NORTON)
+        self.assertEqual(state.theme_mode, ThemeMode.NORTON)
+        toggled_back = state.toggle_theme()
+        self.assertEqual(toggled_back, ThemeMode.MODERN)
+        self.assertEqual(state.theme_mode, ThemeMode.MODERN)
+
+    def test_prefill_theme(self):
+        from mlx_commander.tui.state import ThemeMode
+        state = CommanderState()
+        state.apply_prefill({"theme": "norton"})
+        self.assertEqual(state.theme_mode, ThemeMode.NORTON)
+        state.apply_prefill({"theme_mode": "modern"})
+        self.assertEqual(state.theme_mode, ThemeMode.MODERN)
+
 
 if __name__ == "__main__":
     unittest.main()
+

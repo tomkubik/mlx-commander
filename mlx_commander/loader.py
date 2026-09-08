@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
+from mlx_commander.exceptions import MissingDependencyError
+
 try:
     import datasets
     from datasets import Dataset, DatasetDict, load_from_disk
@@ -27,11 +29,30 @@ except ImportError:
 
 try:
     import pyarrow as pa
+    import pyarrow.dataset as ds
     import pyarrow.ipc as pa_ipc
     import pyarrow.parquet as pq
     HAS_PYARROW = True
 except ImportError:
     HAS_PYARROW = False
+    pa = None
+    ds = None
+    pa_ipc = None
+    pq = None
+
+try:
+    import duckdb
+    HAS_DUCKDB = True
+except ImportError:
+    HAS_DUCKDB = False
+    duckdb = None
+
+try:
+    import lance
+    HAS_LANCE = True
+except ImportError:
+    HAS_LANCE = False
+    lance = None
 
 
 @dataclass
@@ -201,6 +222,37 @@ def load_from_tsv(file_path: Path) -> List[Dict[str, Any]]:
     return records
 
 
+def load_from_text(file_path: Path) -> List[Dict[str, Any]]:
+    """
+    Load records from a plain text file (.txt, .text).
+    Supports multiple encodings with automatic fallbacks:
+    1. utf-8-sig (detects and cleanly removes UTF-8 BOM)
+    2. utf-8
+    3. utf-16 (handles UTF-16-LE / UTF-16-BE with BOM)
+    4. latin-1 / cp1252 (fallback that never fails decoding)
+
+    Converts each non-empty line into a record: {"text": line}
+    """
+    raw_bytes = file_path.read_bytes()
+    decoded_text: Optional[str] = None
+    for enc in ("utf-8-sig", "utf-8", "utf-16", "latin-1"):
+        try:
+            decoded_text = raw_bytes.decode(enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+
+    if decoded_text is None:
+        decoded_text = raw_bytes.decode("utf-8", errors="replace")
+
+    records: List[Dict[str, Any]] = []
+    for line in decoded_text.splitlines():
+        cleaned = line.strip()
+        if cleaned:
+            records.append({"text": cleaned})
+    return records
+
+
 def load_from_sqlite(
     file_path: Path,
     table_name: Optional[str] = None,
@@ -294,6 +346,96 @@ def load_from_sqlite(
         rows = [dict(r) for r in cursor.fetchall()]
         return {"default": rows}, False
 
+    finally:
+        conn.close()
+
+
+def load_from_duckdb(
+    file_path: Path,
+    table_name: Optional[str] = None,
+) -> Tuple[Dict[str, List[Dict[str, Any]]], bool]:
+    """
+    Load records from a DuckDB database (.duckdb, .ddb).
+    Returns (raw_splits, is_split).
+    Supports:
+    - Explicit table selection via table_name or 'file.duckdb::table_name'.
+    - Automatic mapping of split tables ('train', 'test', 'valid', 'validation', 'val', 'dev').
+    - Single table database auto-loading.
+    - Multi-table schema matching auto-splitting.
+    """
+    if not HAS_DUCKDB:
+        raise MissingDependencyError(
+            format_name="DuckDB",
+            package_name="duckdb",
+            install_command="pip install duckdb",
+            description="DuckDB database files require the 'duckdb' library.",
+            extra_name="duckdb",
+        )
+
+    db_path = str(file_path.resolve())
+    conn = duckdb.connect(db_path, read_only=True)
+    try:
+        res = conn.execute("SHOW TABLES").fetchall()
+        tables = [row[0] for row in res]
+        if not tables:
+            raise ValueError(f"No user tables found in DuckDB database '{file_path}'.")
+
+        def _fetch_records(tbl: str) -> List[Dict[str, Any]]:
+            query = f'SELECT * FROM "{tbl}"'
+            rel = conn.execute(query)
+            try:
+                return rel.arrow().to_pylist()
+            except Exception:
+                cols = [desc[0] for desc in rel.description]
+                rows = rel.fetchall()
+                return [dict(zip(cols, r)) for r in rows]
+
+        if table_name:
+            if table_name not in tables:
+                raise ValueError(
+                    f"Table '{table_name}' not found in DuckDB database '{file_path.name}'. Available tables: {', '.join(tables)}"
+                )
+            return {"default": _fetch_records(table_name)}, False
+
+        # Check if table names match standard split names
+        split_map: Dict[str, str] = {}
+        for t in tables:
+            t_lower = t.lower()
+            if t_lower in ("train", "training"):
+                split_map["train"] = t
+            elif t_lower in ("valid", "validation", "val", "dev"):
+                split_map["valid"] = t
+            elif t_lower in ("test", "testing", "eval", "evaluation"):
+                split_map["test"] = t
+
+        if split_map:
+            raw_splits: Dict[str, List[Dict[str, Any]]] = {}
+            for s_name, t_name in split_map.items():
+                raw_splits[s_name] = _fetch_records(t_name)
+            return raw_splits, len(raw_splits) > 1
+
+        if len(tables) == 1:
+            return {"default": _fetch_records(tables[0])}, False
+
+        primary_candidates = [
+            t for t in tables
+            if t.lower() in ("data", "dataset", "records", "items", "samples", "main")
+        ]
+        if primary_candidates:
+            return {"default": _fetch_records(primary_candidates[0])}, False
+
+        # Check if table schemas match
+        table_cols = {}
+        for t in tables:
+            schema_rows = conn.execute(f'DESCRIBE "{t}"').fetchall()
+            table_cols[t] = [r[0] for r in schema_rows]
+
+        first_cols = table_cols[tables[0]]
+        if all(table_cols[t] == first_cols for t in tables[1:]):
+            raw_splits = {t: _fetch_records(t) for t in tables}
+            return raw_splits, True
+
+        return {"default": _fetch_records(tables[0])}, False
     finally:
         conn.close()
 
@@ -447,7 +589,13 @@ def load_from_webdataset(
 def load_from_arrow_file(file_path: Path) -> List[Dict[str, Any]]:
     """Load records from an Apache Arrow IPC stream/file."""
     if not HAS_PYARROW:
-        raise RuntimeError("Reading .arrow files directly requires 'pyarrow' installed.")
+        raise MissingDependencyError(
+            format_name="Apache Arrow",
+            package_name="pyarrow",
+            install_command="pip install pyarrow",
+            description="Arrow IPC files require the 'pyarrow' library to decode.",
+            extra_name="arrow",
+        )
     try:
         with pa.memory_map(str(file_path), "r") as source:
             try:
@@ -458,20 +606,71 @@ def load_from_arrow_file(file_path: Path) -> List[Dict[str, Any]]:
                 table = reader.read_all()
         return table.to_pylist()
     except Exception as e:
-        raise RuntimeError(f"Failed to read Arrow file {file_path}: {e}")
+        raise RuntimeError(f"Failed to read Arrow file '{file_path}': {e}")
 
 
 def load_from_parquet_file(file_path: Path) -> List[Dict[str, Any]]:
-    """Load records from a Parquet file with automatic zero-dependency pure-Python fallback."""
-    if HAS_PYARROW:
-        try:
-            table = pq.read_table(str(file_path))
-            return table.to_pylist()
-        except Exception:
-            pass  # Fallback to pure Python reader
+    """Load records from a Parquet file using pyarrow."""
+    if not HAS_PYARROW:
+        raise MissingDependencyError(
+            format_name="Parquet",
+            package_name="pyarrow",
+            install_command="pip install pyarrow",
+            description="Parquet files use columnar compression (snappy, zstd, dictionary encoding) requiring the high-performance 'pyarrow' library.",
+            extra_name="parquet",
+        )
+    try:
+        table = pq.read_table(str(file_path))
+        return table.to_pylist()
+    except Exception as e:
+        raise RuntimeError(f"Failed to read Parquet file '{file_path}': {e}")
 
-    from mlx_commander.pure_parquet import read_parquet_records
-    return read_parquet_records(file_path)
+
+def load_from_parquet_dir(dir_path: Path) -> List[Dict[str, Any]]:
+    """Load records from a directory of Parquet files (sharded dataset) using pyarrow.dataset."""
+    if not HAS_PYARROW:
+        raise MissingDependencyError(
+            format_name="Parquet",
+            package_name="pyarrow",
+            install_command="pip install pyarrow",
+            description="Parquet files use columnar compression (snappy, zstd, dictionary encoding) requiring the high-performance 'pyarrow' library.",
+            extra_name="parquet",
+        )
+    try:
+        dataset = ds.dataset(str(dir_path), format="parquet")
+        table = dataset.to_table()
+        return table.to_pylist()
+    except Exception as e:
+        raise RuntimeError(f"Failed to read Parquet directory '{dir_path}': {e}")
+
+
+def is_lance_dir(path: Path) -> bool:
+    """Check if directory has the signature of a Lance dataset."""
+    if not path.is_dir():
+        return False
+    if path.suffix.lower() == ".lance" or path.name.lower().endswith(".lance"):
+        return True
+    if (path / "_versions").is_dir() or (path / "_indices").is_dir():
+        return True
+    return False
+
+
+def load_from_lance(dir_path: Path) -> List[Dict[str, Any]]:
+    """Load records from a Lance dataset directory (.lance)."""
+    if not HAS_LANCE:
+        raise MissingDependencyError(
+            format_name="Lance",
+            package_name="pylance",
+            install_command="pip install pylance",
+            description="Lance columnar dataset folders require the 'pylance' library.",
+            extra_name="lance",
+        )
+    try:
+        ds_lance = lance.dataset(str(dir_path))
+        table = ds_lance.to_table()
+        return table.to_pylist()
+    except Exception as e:
+        raise RuntimeError(f"Failed to read Lance dataset '{dir_path}': {e}")
 
 
 def is_hf_save_to_disk_dir(path: Path) -> bool:
@@ -549,10 +748,14 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
             raw_splits["default"] = load_from_csv(file_path)
         elif ext in (".tsv", ".tab"):
             raw_splits["default"] = load_from_tsv(file_path)
+        elif ext in (".txt", ".text"):
+            raw_splits["default"] = load_from_text(file_path)
         elif ext == ".parquet":
             raw_splits["default"] = load_from_parquet_file(file_path)
         elif ext == ".arrow":
             raw_splits["default"] = load_from_arrow_file(file_path)
+        elif ext in (".duckdb", ".ddb"):
+            raw_splits, is_split = load_from_duckdb(file_path, table_name=table_name)
         elif ext in (".sqlite", ".db", ".sqlite3") or table_name is not None:
             raw_splits, is_split = load_from_sqlite(file_path, table_name=table_name)
         elif any(full_ext.endswith(tar_ext) for tar_ext in (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz")):
@@ -561,95 +764,117 @@ def load_single_local_dataset(path: Union[Path, str]) -> LoadedDataset:
             raw_splits["default"] = load_from_json_or_jsonl(file_path)
 
     elif file_path.is_dir():
-        # Check if subdirectories correspond to splits (e.g. train, test, validation)
-        split_dirs = [d for d in file_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
-        # If HF save_to_disk with dataset_dict.json
-        dict_json_file = file_path / "dataset_dict.json"
-        if dict_json_file.exists():
-            try:
-                with open(dict_json_file, "r") as f:
-                    dict_info = json.load(f)
-                    expected_splits = dict_info.get("splits", [])
-                    for s in expected_splits:
-                        s_dir = file_path / s
-                        arrow_files = list(s_dir.glob("*.arrow"))
-                        s_records: List[Dict[str, Any]] = []
-                        for af in arrow_files:
-                            s_records.extend(load_from_arrow_file(af))
-                        raw_splits[s] = s_records
-            except Exception:
-                pass
+        if is_lance_dir(file_path):
+            raw_splits["default"] = load_from_lance(file_path)
+        else:
+            # Check if subdirectories correspond to splits (e.g. train, test, validation)
+            split_dirs = [d for d in file_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+            # If HF save_to_disk with dataset_dict.json
+            dict_json_file = file_path / "dataset_dict.json"
+            if dict_json_file.exists():
+                try:
+                    with open(dict_json_file, "r") as f:
+                        dict_info = json.load(f)
+                        expected_splits = dict_info.get("splits", [])
+                        for s in expected_splits:
+                            s_dir = file_path / s
+                            arrow_files = list(s_dir.glob("*.arrow"))
+                            s_records: List[Dict[str, Any]] = []
+                            for af in arrow_files:
+                                s_records.extend(load_from_arrow_file(af))
+                            raw_splits[s] = s_records
+                except Exception:
+                    pass
 
-        if not raw_splits:
-            # Check for standard split files in the root dir: train.jsonl, test.jsonl, etc.
-            found_split_files = False
-            split_exts = [
-                ".jsonl", ".parquet", ".arrow", ".json", ".csv",
-                ".tsv", ".tab", ".sqlite", ".db", ".sqlite3",
-                ".tar", ".tar.gz", ".tgz",
-            ]
-            for s in ["train", "valid", "validation", "val", "test", "dev"]:
-                for ext in split_exts:
-                    candidate = file_path / f"{s}{ext}"
-                    if candidate.exists():
-                        found_split_files = True
-                        if ext in (".json", ".jsonl"):
-                            raw_splits[s] = load_from_json_or_jsonl(candidate)
-                        elif ext == ".csv":
-                            raw_splits[s] = load_from_csv(candidate)
-                        elif ext in (".tsv", ".tab"):
-                            raw_splits[s] = load_from_tsv(candidate)
-                        elif ext == ".parquet":
-                            raw_splits[s] = load_from_parquet_file(candidate)
-                        elif ext == ".arrow":
-                            raw_splits[s] = load_from_arrow_file(candidate)
-                        elif ext in (".sqlite", ".db", ".sqlite3"):
-                            db_splits, _ = load_from_sqlite(candidate)
-                            raw_splits[s] = db_splits.get("default", list(db_splits.values())[0] if db_splits else [])
-                        elif ext in (".tar", ".tar.gz", ".tgz") or ext.endswith(".tar"):
-                            tar_splits, _ = load_from_webdataset(candidate)
-                            raw_splits[s] = tar_splits.get("default", list(tar_splits.values())[0] if tar_splits else [])
-                        break
+            if not raw_splits:
+                # Check for standard split files in the root dir: train.jsonl, test.jsonl, etc.
+                found_split_files = False
+                split_exts = [
+                    ".jsonl", ".parquet", ".arrow", ".json", ".csv",
+                    ".tsv", ".tab", ".txt", ".text", ".duckdb", ".ddb",
+                    ".sqlite", ".db", ".sqlite3",
+                    ".tar", ".tar.gz", ".tgz",
+                ]
+                for s in ["train", "valid", "validation", "val", "test", "dev"]:
+                    for ext in split_exts:
+                        candidate = file_path / f"{s}{ext}"
+                        if candidate.exists():
+                            found_split_files = True
+                            if ext in (".json", ".jsonl"):
+                                raw_splits[s] = load_from_json_or_jsonl(candidate)
+                            elif ext == ".csv":
+                                raw_splits[s] = load_from_csv(candidate)
+                            elif ext in (".tsv", ".tab"):
+                                raw_splits[s] = load_from_tsv(candidate)
+                            elif ext in (".txt", ".text"):
+                                raw_splits[s] = load_from_text(candidate)
+                            elif ext == ".parquet":
+                                raw_splits[s] = load_from_parquet_file(candidate)
+                            elif ext == ".arrow":
+                                raw_splits[s] = load_from_arrow_file(candidate)
+                            elif ext in (".duckdb", ".ddb"):
+                                db_splits, _ = load_from_duckdb(candidate)
+                                raw_splits[s] = db_splits.get("default", list(db_splits.values())[0] if db_splits else [])
+                            elif ext in (".sqlite", ".db", ".sqlite3"):
+                                db_splits, _ = load_from_sqlite(candidate)
+                                raw_splits[s] = db_splits.get("default", list(db_splits.values())[0] if db_splits else [])
+                            elif ext in (".tar", ".tar.gz", ".tgz") or ext.endswith(".tar"):
+                                tar_splits, _ = load_from_webdataset(candidate)
+                                raw_splits[s] = tar_splits.get("default", list(tar_splits.values())[0] if tar_splits else [])
+                            break
 
-            if not found_split_files:
-                # Aggregate all data files in the directory
-                all_records: List[Dict[str, Any]] = []
-                supported_exts = (
-                    ".jsonl", ".json", ".parquet", ".arrow", ".csv",
-                    ".tsv", ".tab", ".sqlite", ".db", ".sqlite3",
-                    ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz",
-                )
-                data_files = sorted([
-                    f for f in file_path.glob("*")
-                    if any(f.name.lower().endswith(ext) for ext in supported_exts)
-                ])
-                for df in data_files:
-                    fname = df.name.lower()
-                    if fname.endswith((".json", ".jsonl")):
-                        all_records.extend(load_from_json_or_jsonl(df))
-                    elif fname.endswith(".csv"):
-                        all_records.extend(load_from_csv(df))
-                    elif fname.endswith((".tsv", ".tab")):
-                        all_records.extend(load_from_tsv(df))
-                    elif fname.endswith(".parquet"):
-                        all_records.extend(load_from_parquet_file(df))
-                    elif fname.endswith(".arrow"):
-                        all_records.extend(load_from_arrow_file(df))
-                    elif fname.endswith((".sqlite", ".db", ".sqlite3")):
-                        db_splits, _ = load_from_sqlite(df)
-                        for rows in db_splits.values():
-                            all_records.extend(rows)
-                    elif any(fname.endswith(ext) for ext in (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz")):
-                        tar_splits, _ = load_from_webdataset(df)
-                        for rows in tar_splits.values():
-                            all_records.extend(rows)
-                raw_splits["default"] = all_records
+                if not found_split_files:
+                    # Check for sharded Parquet dataset directory
+                    parquet_shards = sorted(list(file_path.glob("*.parquet")))
+                    if parquet_shards:
+                        raw_splits["default"] = load_from_parquet_dir(file_path)
+                    else:
+                        # Aggregate all data files in the directory
+                        all_records: List[Dict[str, Any]] = []
+                        supported_exts = (
+                            ".jsonl", ".json", ".parquet", ".arrow", ".csv",
+                            ".tsv", ".tab", ".txt", ".text", ".duckdb", ".ddb",
+                            ".sqlite", ".db", ".sqlite3",
+                            ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz",
+                        )
+                        data_files = sorted([
+                            f for f in file_path.glob("*")
+                            if any(f.name.lower().endswith(ext) for ext in supported_exts)
+                        ])
+                        for df in data_files:
+                            fname = df.name.lower()
+                            if fname.endswith((".json", ".jsonl")):
+                                all_records.extend(load_from_json_or_jsonl(df))
+                            elif fname.endswith(".csv"):
+                                all_records.extend(load_from_csv(df))
+                            elif fname.endswith((".tsv", ".tab")):
+                                all_records.extend(load_from_tsv(df))
+                            elif fname.endswith((".txt", ".text")):
+                                all_records.extend(load_from_text(df))
+                            elif fname.endswith(".parquet"):
+                                all_records.extend(load_from_parquet_file(df))
+                            elif fname.endswith(".arrow"):
+                                all_records.extend(load_from_arrow_file(df))
+                            elif fname.endswith((".duckdb", ".ddb")):
+                                db_splits, _ = load_from_duckdb(df)
+                                for rows in db_splits.values():
+                                    all_records.extend(rows)
+                            elif fname.endswith((".sqlite", ".db", ".sqlite3")):
+                                db_splits, _ = load_from_sqlite(df)
+                                for rows in db_splits.values():
+                                    all_records.extend(rows)
+                            elif any(fname.endswith(ext) for ext in (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz")):
+                                tar_splits, _ = load_from_webdataset(df)
+                                for rows in tar_splits.values():
+                                    all_records.extend(rows)
+                        raw_splits["default"] = all_records
 
     if not raw_splits or all(len(v) == 0 for v in raw_splits.values()):
         raise ValueError(
             f"No dataset records found in '{path}'. Supported formats include Hugging Face save_to_disk folders, "
             f"Parquet (.parquet), Arrow (.arrow), JSON Lines (.jsonl), JSON (.json), CSV (.csv), "
-            f"TSV (.tsv, .tab), SQLite (.sqlite, .db, .sqlite3), or WebDataset (.tar, .tar.gz)."
+            f"TSV (.tsv, .tab), Plain Text (.txt), SQLite (.sqlite, .db), DuckDB (.duckdb), "
+            f"Lance (.lance), or WebDataset (.tar, .tar.gz)."
         )
 
     split_names = [k for k in raw_splits.keys() if len(raw_splits[k]) > 0]

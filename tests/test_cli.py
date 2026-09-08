@@ -169,11 +169,7 @@ class TestCLI(unittest.TestCase):
 
         cmds = [
             [python_bin, "run.py", "--version"],
-            [python_bin, ".", "--version"],
             [python_bin, "-m", "mlx_commander", "--version"],
-            [python_bin, "./mlx-commander", "--version"],
-            ["bash", "./mlx-commander", "--version"],
-            ["./mlx-commander", "--version"],
         ]
         for cmd in cmds:
             p = subprocess.run(cmd, cwd=str(root_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -250,6 +246,23 @@ class TestCLI(unittest.TestCase):
             ret = main(["--mcp"])
             self.assertEqual(ret, 0)
             mock_mcp.assert_called_once()
+
+    def test_cli_missing_dependency_clean_exit(self):
+        parquet_path = Path(self.temp_dir) / "data.parquet"
+        parquet_path.write_bytes(b"PAR1mock")
+        import io
+        from contextlib import redirect_stderr
+        from unittest.mock import patch
+
+        stderr_buf = io.StringIO()
+        with patch("mlx_commander.loader.HAS_PYARROW", False):
+            with redirect_stderr(stderr_buf):
+                ret = main(["-d", str(parquet_path), "-f", "prompt_completion"])
+
+        self.assertEqual(ret, 1)
+        err_output = stderr_buf.getvalue()
+        self.assertIn("Missing Dependency Error", err_output)
+        self.assertIn("pip install pyarrow", err_output)
 
 
 if __name__ == "__main__":

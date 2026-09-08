@@ -33,8 +33,19 @@ from mlx_commander.splitter import (
     calculate_split_counts,
     generate_random_seed,
 )
-from mlx_commander.tui.state import ActivePanel, CommanderState
+from mlx_commander.tui.state import ActivePanel, CommanderState, ThemeMode
 from mlx_commander.tui.widgets import (
+    COLOR_BANNER,
+    COLOR_BORDER_JOINTS,
+    COLOR_SUCCESS,
+    COLOR_NORMAL_TEXT,
+    COLOR_ERROR,
+    COLOR_TITLE_ACCENT,
+    COLOR_INPUT_NORMAL,
+    COLOR_INPUT_FOCUSED,
+    COLOR_FN_NUMBER,
+    COLOR_FN_LABEL,
+    COLOR_PANEL_BG,
     configure_escdelay,
     draw_box_panel,
     draw_button,
@@ -49,29 +60,69 @@ from mlx_commander.tui.widgets import (
     show_error_dialog,
     show_help_dialog,
     show_message_dialog,
+    show_missing_dependency_dialog,
     show_output_destination_dialog,
     show_results_dialog,
     show_text_edit_dialog,
 )
 
 
-def init_colors() -> None:
-    """Initialize curses color pairs for MLX-Commander."""
-    if curses.has_colors():
-        curses.start_color()
+def init_colors(theme_mode: str = "modern") -> None:
+    """Initialize curses color pairs for Modern or Norton Commander color schemes."""
+    if not curses.has_colors():
+        return
+    curses.start_color()
+    is_norton = (str(theme_mode).lower().strip() in ("norton", "nc", "blue", "classic"))
+
+    if is_norton:
+        # Norton Commander Classic EGA/VGA Palette
+        # Pair 1: Top Header Banner (Black on Cyan)
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        # Pair 2: Light Blue / Bright Cyan Joints & Borders on Deep Blue
+        curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLUE)
+        # Pair 3: Success / Checked on Deep Blue
+        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLUE)
+        # Pair 4: Normal Text & Inactive Labels on Deep Blue
+        curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        # Pair 5: Error / Alerts (White on Red - classic Norton red box)
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_RED)
+        # Pair 6: Panel Titles & Accents (Yellow on Deep Blue)
+        curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+        # Pair 7: User Toggleable Inputs & Buttons (Black on Cyan background)
+        curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        # Pair 8: User Toggleable Input Focused (White on Black)
+        curses.init_pair(8, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        # Pair 9: Function Key Number (White on Black)
+        curses.init_pair(9, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        # Pair 10: Function Key Label (Black on Cyan)
+        curses.init_pair(10, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        # Pair 11: Deep Blue Screen / Panel Background Fill
+        curses.init_pair(11, curses.COLOR_WHITE, curses.COLOR_BLUE)
+    else:
+        # Modern Dark Theme
         curses.use_default_colors()
-        # Pair 1: Header / Footer Banner (White on Blue or Black)
+        # Pair 1: Header Banner (White on Blue or Default)
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
-        # Pair 2: Active / Focus / Border (Cyan)
+        # Pair 2: Active / Teal / Border
         curses.init_pair(2, curses.COLOR_CYAN, -1)
-        # Pair 3: Success / Selected / Check (Green)
+        # Pair 3: Success / Green
         curses.init_pair(3, curses.COLOR_GREEN, -1)
-        # Pair 4: Normal text (White)
+        # Pair 4: Normal Text / Labels (White)
         curses.init_pair(4, curses.COLOR_WHITE, -1)
-        # Pair 5: Warning / Error (Red)
+        # Pair 5: Error / Alerts (Red)
         curses.init_pair(5, curses.COLOR_RED, -1)
-        # Pair 6: Muted / Dim (Yellow)
-        curses.init_pair(6, curses.COLOR_YELLOW, -1)
+        # Pair 6: Panel Titles / Accent (White in modern)
+        curses.init_pair(6, curses.COLOR_WHITE, -1)
+        # Pair 7: User Toggleable Inputs & Buttons (Teal)
+        curses.init_pair(7, curses.COLOR_CYAN, -1)
+        # Pair 8: User Toggleable Input Focused (Teal Standout)
+        curses.init_pair(8, curses.COLOR_CYAN, -1)
+        # Pair 9: Function Key Number
+        curses.init_pair(9, curses.COLOR_WHITE, -1)
+        # Pair 10: Function Key Label
+        curses.init_pair(10, curses.COLOR_CYAN, -1)
+        # Pair 11: Panel Fill
+        curses.init_pair(11, curses.COLOR_WHITE, -1)
 
 
 def execute_conversion(stdscr: curses.window, state: CommanderState) -> Optional[ConversionResult]:
@@ -126,14 +177,20 @@ def run_commander_tui(
 ) -> Optional[ConversionResult]:
     """Main event loop for the persistent MLX-Commander dashboard."""
     configure_escdelay(25)
-    init_colors()
-    curses.curs_set(0)
-    stdscr.keypad(True)
-
     state = initial_state if initial_state is not None else CommanderState()
 
     if prefill:
         state.apply_prefill(prefill)
+
+    init_colors(state.theme_mode)
+    if state.theme_mode == ThemeMode.NORTON:
+        try:
+            stdscr.bkgd(" ", get_color(COLOR_PANEL_BG))
+        except curses.error:
+            pass
+
+    curses.curs_set(0)
+    stdscr.keypad(True)
 
     if not state.loaded_dataset:
         initial_path = default_dataset_path or (state.dataset_path if state.dataset_path else os.getcwd())
@@ -147,14 +204,22 @@ def run_commander_tui(
                 or any(p.glob("*.arrow"))
                 or any(p.glob("*.csv"))
                 or any(p.glob("*.tsv"))
+                or any(p.glob("*.txt"))
+                or any(p.glob("*.text"))
                 or any(p.glob("*.sqlite"))
                 or any(p.glob("*.db"))
+                or any(p.glob("*.duckdb"))
+                or any(p.glob("*.ddb"))
+                or any(p.glob("*.lance"))
+                or p.name.endswith(".lance")
                 or any(p.glob("*.tar"))
                 or any(p.glob("*.tar.gz"))
                 or any(p.glob("dataset_info.json"))
             )
             if has_dataset:
-                state.load_dataset(str(p))
+                loaded = state.load_dataset(str(p))
+                if not loaded and state.last_missing_dependency:
+                    show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
             else:
                 state.dataset_path = str(p)
                 if not state.has_custom_output_dir:
@@ -196,10 +261,14 @@ def run_commander_tui(
         # ----------------------------------------------------
         # 1. Header Banner
         # ----------------------------------------------------
-        hdr_attr = (get_color(1) | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
+        hdr_attr = (get_color(COLOR_BANNER) | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
         safe_addstr(stdscr, 0, 0, " " * max_x, hdr_attr)
-        safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
-        hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F10: Exit]" if max_x >= 88 else "[F1: Help | F10: Exit]"
+        if state.theme_mode == ThemeMode.NORTON:
+            safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Norton Commander Classic Mode", hdr_attr)
+            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9: Scheme | F10: Exit]" if max_x >= 92 else "[F1: Help | F9: Scheme]"
+        else:
+            safe_addstr(stdscr, 0, 2, "MLX-Commander  ::  Persistent Dataset Conversion Dashboard", hdr_attr)
+            hint_str = "[F1: Help | F2: Open | F3: Output | F5: Convert | F9: Scheme | F10: Exit]" if max_x >= 96 else "[F1: Help | F10: Exit]"
         safe_addstr(stdscr, 0, max(2, max_x - len(hint_str) - 2), hint_str, hdr_attr)
 
         # ----------------------------------------------------
@@ -210,13 +279,13 @@ def run_commander_tui(
 
         # Tier 1: Top configuration panels
         mapping_fields = state.get_mapping_fields_for_format()
-        needed_top_h = max(12, 10 + len(mapping_fields))
-        max_possible_top = max(9, max_y - 12)
+        needed_top_h = max(13, 11 + len(mapping_fields))
+        max_possible_top = max(11, max_y - 10)
         panel_h = min(needed_top_h, max_possible_top)
 
         # Tier 2: Middle visual mapping pipeline
         remaining_y = max(8, max_y - 1 - (panel_h + 1))
-        vis_h = max(5, min(10, remaining_y // 2))
+        vis_h = max(4, min(10, remaining_y // 2))
         vis_y = panel_h + 1
 
         # Tier 3: Bottom live preview panel
@@ -248,29 +317,29 @@ def run_commander_tui(
         safe_addstr(stdscr, 2, 2, "Path: ", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         safe_addstr(stdscr, 2, 8, disp_path[:max_path_w], (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
-        # Action Buttons
+        # Action Buttons (stacked vertically)
         f2_focus = is_left and state.left_focus_idx == 0
         edit_focus = is_left and state.left_focus_idx == 1
         draw_button(stdscr, 3, 2, "Finder (F2)", is_focused=f2_focus)
-        draw_button(stdscr, 3, 18, "Change Path", is_focused=edit_focus)
-        safe_addstr(stdscr, 4, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+        draw_button(stdscr, 4, 2, "Change Path", is_focused=edit_focus)
+        safe_addstr(stdscr, 5, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
         # Dataset Stats
         if state.loaded_dataset:
             ds = state.loaded_dataset
-            safe_addstr(stdscr, 5, 2, f"Rows: {ds.total_rows:,}  |  Splits: {len(ds.split_names)}", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, 6, 2, f"Rows: {ds.total_rows:,}  |  Splits: {len(ds.split_names)}", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
             split_summary = ", ".join(f"{s}: {ds.split_counts.get(s, 0):,}" for s in ds.split_names[:3])
-            safe_addstr(stdscr, 6, 2, f"Found: [{split_summary}]", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+            safe_addstr(stdscr, 7, 2, f"Found: [{split_summary}]", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
             cols = ds.columns
         else:
-            safe_addstr(stdscr, 5, 2, "No dataset loaded.", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-            safe_addstr(stdscr, 6, 2, "Click Finder (F2) or Change Path.", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+            safe_addstr(stdscr, 6, 2, "No dataset loaded.", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+            safe_addstr(stdscr, 7, 2, "Use Finder (F2) or Change Path.", (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
             cols = []
 
         # Available Columns List
-        safe_addstr(stdscr, 7, 2, f"Columns ({len(cols)}):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 8, 2, f"Columns ({len(cols)}):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         col_list_focus = is_left and state.left_focus_idx == 2
-        col_list_start_y = 8
+        col_list_start_y = 9
         col_list_rows = max(1, panel_h - 11)
 
         if cols:
@@ -289,11 +358,11 @@ def run_commander_tui(
                     prefix = " ▶ " if is_col_sel else "   "
                     text = f"{prefix}{c_idx + 1}. {c_name}"[:left_w - 4]
                     if is_col_sel:
-                        c_attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
+                        c_attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if curses.has_colors() else curses.A_STANDOUT
                     elif col_list_focus:
-                        c_attr = (get_color(2) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+                        c_attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
                     else:
-                        c_attr = get_color(2) if curses.has_colors() else 0
+                        c_attr = get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0
                     safe_addstr(stdscr, row_y, 2, text, c_attr)
 
             # Sample value preview for currently highlighted column
@@ -322,49 +391,30 @@ def run_commander_tui(
         )
 
         mapping_fields = state.get_mapping_fields_for_format()
-        total_right_fields = 1 + len(mapping_fields) + 7
+        total_right_fields = 11 + len(mapping_fields)
+        if state.right_focus_idx >= total_right_fields:
+            state.right_focus_idx = total_right_fields - 1
 
-        # Field 0: Target Format Radios
-        fmt_focus = is_right and state.right_focus_idx == 0
-        safe_addstr(stdscr, 2, left_w + 2, "Format:", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        draw_radio(
-            stdscr,
-            2,
-            left_w + 10,
-            "prompt_comp",
-            is_checked=(state.target_format == MLXFormat.PROMPT_COMPLETION),
-            is_focused=(fmt_focus and state.target_format == MLXFormat.PROMPT_COMPLETION),
-        )
-        draw_radio(
-            stdscr,
-            2,
-            left_w + 26,
-            "chat",
-            is_checked=(state.target_format == MLXFormat.CHAT),
-            is_focused=(fmt_focus and state.target_format == MLXFormat.CHAT),
-        )
-        draw_radio(
-            stdscr,
-            3,
-            left_w + 10,
-            "text",
-            is_checked=(state.target_format == MLXFormat.TEXT),
-            is_focused=(fmt_focus and state.target_format == MLXFormat.TEXT),
-        )
-        draw_radio(
-            stdscr,
-            3,
-            left_w + 26,
-            "dpo",
-            is_checked=(state.target_format == MLXFormat.DPO),
-            is_focused=(fmt_focus and state.target_format == MLXFormat.DPO),
-        )
+        # Fields 0..3: Target Format Radios (stacked vertically, one under another)
+        safe_addstr(stdscr, 2, left_w + 2, "Format (MLX Target):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        format_options = [
+            (MLXFormat.PROMPT_COMPLETION, "prompt_comp (Q&A)", "prompt_comp"),
+            (MLXFormat.CHAT, "chat (Dialogue / Messages)", "chat"),
+            (MLXFormat.TEXT, "text (Causal LM)", "text"),
+            (MLXFormat.DPO, "dpo (Preference)", "dpo"),
+        ]
+        for f_i, (fmt_val, fmt_lbl, fmt_short) in enumerate(format_options):
+            row_y = 3 + f_i
+            lbl_text = fmt_short if right_w < 35 else fmt_lbl
+            is_chk = (state.target_format == fmt_val)
+            is_foc = (is_right and state.right_focus_idx == f_i)
+            draw_radio(stdscr, row_y, left_w + 4, lbl_text, is_checked=is_chk, is_focused=is_foc)
 
-        # Fields 1..N: Column Mappings
-        safe_addstr(stdscr, 4, left_w + 2, "Column Mappings [Press Enter to Pick]:", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        # Fields 4..(3 + len(mapping_fields)): Column Mappings
+        safe_addstr(stdscr, 7, left_w + 2, "Column Mappings [Press Enter]:", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
         for idx, f_info in enumerate(mapping_fields):
-            row_y = 5 + idx
-            is_f_focused = is_right and (state.right_focus_idx == 1 + idx)
+            row_y = 8 + idx
+            is_f_focused = is_right and (state.right_focus_idx == 4 + idx)
             draw_field(
                 stdscr,
                 row_y,
@@ -377,42 +427,33 @@ def run_commander_tui(
             )
 
         # Next rows: Splits & Output
-        splits_start_y = 5 + len(mapping_fields)
+        splits_start_y = 8 + len(mapping_fields)
         split_counts = state.get_split_counts()
 
-        train_focus = is_right and state.right_focus_idx == 1 + len(mapping_fields)
-        valid_focus = is_right and state.right_focus_idx == 2 + len(mapping_fields)
-        test_focus = is_right and state.right_focus_idx == 3 + len(mapping_fields)
+        train_focus = is_right and state.right_focus_idx == 4 + len(mapping_fields)
+        valid_focus = is_right and state.right_focus_idx == 5 + len(mapping_fields)
+        test_focus = is_right and state.right_focus_idx == 6 + len(mapping_fields)
 
         safe_addstr(stdscr, splits_start_y, left_w + 2, "Splits (%):", (get_color(4) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        draw_field(stdscr, splits_start_y, left_w + 14, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=8)
-        draw_field(stdscr, splits_start_y, left_w + 28, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=8)
-        draw_field(stdscr, splits_start_y, left_w + 42, "Test", f"{state.test_pct:.0f}%", is_focused=test_focus, val_width=8)
-
-        if state.loaded_dataset:
-            safe_addstr(
-                stdscr,
-                splits_start_y + 1,
-                left_w + 4,
-                f"Records: {split_counts['train']:,} train / {split_counts['valid']:,} valid / {split_counts['test']:,} test",
-                (get_color(4) | curses.A_DIM) if curses.has_colors() else curses.A_DIM,
-            )
+        draw_field(stdscr, splits_start_y, left_w + 14, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=6)
+        draw_field(stdscr, splits_start_y, left_w + 27, "Valid", f"{state.valid_pct:.0f}%", is_focused=valid_focus, val_width=6)
+        draw_field(stdscr, splits_start_y, left_w + 40, "Test", f"{state.test_pct:.0f}%", is_focused=test_focus, val_width=6)
 
         # Seed & Randomize
-        seed_y = splits_start_y + 2
-        seed_focus = is_right and state.right_focus_idx == 4 + len(mapping_fields)
-        rand_focus = is_right and state.right_focus_idx == 5 + len(mapping_fields)
-        draw_field(stdscr, seed_y, left_w + 2, "Seed", str(state.seed), is_focused=seed_focus, val_width=12)
-        draw_button(stdscr, seed_y, left_w + 22, "Randomize (r)", is_focused=rand_focus)
+        seed_y = splits_start_y + 1
+        seed_focus = is_right and state.right_focus_idx == 7 + len(mapping_fields)
+        rand_focus = is_right and state.right_focus_idx == 8 + len(mapping_fields)
+        draw_field(stdscr, seed_y, left_w + 2, "Seed", str(state.seed), is_focused=seed_focus, val_width=8)
+        draw_button(stdscr, seed_y, left_w + 18, "Randomize (r)", is_focused=rand_focus)
 
         # Output Folder
         out_y = seed_y + 1
-        out_focus = is_right and state.right_focus_idx == 6 + len(mapping_fields)
+        out_focus = is_right and state.right_focus_idx == 9 + len(mapping_fields)
         draw_field(stdscr, out_y, left_w + 2, "Output", state.output_dir, is_focused=out_focus, val_width=min(24, right_w - 14))
 
         # Convert Action Button
-        btn_y = panel_h - 2
-        conv_focus = is_right and state.right_focus_idx == 7 + len(mapping_fields)
+        conv_focus = is_right and state.right_focus_idx == 10 + len(mapping_fields)
+        btn_y = min(panel_h - 1, out_y + 1)
         draw_button(stdscr, btn_y, left_w + 4, "Convert Dataset (F5)", is_focused=conv_focus)
 
         # ----------------------------------------------------
@@ -509,16 +550,45 @@ def run_commander_tui(
         # 6. Bottom Status / Hotkey Bar
         # ----------------------------------------------------
         footer_y = max_y - 1
-        safe_addstr(stdscr, footer_y, 0, " " * max_x, hdr_attr)
+        if state.theme_mode == ThemeMode.NORTON:
+            # Classic Norton Commander Function Key Bar:
+            # 1 Help  2 Open  3 Output  5 Convert  9 Scheme  10 Exit
+            fn_items = [
+                ("1", "Help"),
+                ("2", "Open"),
+                ("3", "Output"),
+                ("5", "Convert"),
+                ("9", "Scheme"),
+                ("10", "Exit"),
+            ]
+            safe_addstr(stdscr, footer_y, 0, " " * max_x, get_color(COLOR_PANEL_BG))
+            cur_x = 0
+            if max_x >= 100 and state.status_message:
+                prefix = "[OK] " if not state.status_is_error else "[ERR] "
+                short_status = f"{prefix}{state.status_message}"[:max_x - 65]
+                stat_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+                safe_addstr(stdscr, footer_y, 0, short_status, stat_attr)
+                cur_x = len(short_status) + 2
 
-        bar_shortcuts = "[Tab] Switch  [↑/↓] Move  [Enter] Edit  [F2] Open  [F3] Output  [F5] Convert" if max_x >= 92 else "[Tab] Switch  [F2] Open  [F5] Convert"
-        shortcuts_x = max(10, max_x - len(bar_shortcuts) - 2)
-        avail_status = max(10, shortcuts_x - 4)
+            for num_str, lbl_str in fn_items:
+                if cur_x + len(num_str) + len(lbl_str) + 2 >= max_x:
+                    break
+                num_attr = (get_color(COLOR_FN_NUMBER) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+                lbl_attr = get_color(COLOR_FN_LABEL) if curses.has_colors() else curses.A_STANDOUT
+                safe_addstr(stdscr, footer_y, cur_x, f" {num_str} ", num_attr)
+                cur_x += len(num_str) + 2
+                safe_addstr(stdscr, footer_y, cur_x, f"{lbl_str} ", lbl_attr)
+                cur_x += len(lbl_str) + 1
+        else:
+            safe_addstr(stdscr, footer_y, 0, " " * max_x, hdr_attr)
+            bar_shortcuts = "[Tab] Switch  [↑/↓ or ←/→] Navigate  [Enter] Select  [F2] Open  [F3] Output  [F5] Convert  [F9] Scheme" if max_x >= 102 else "[Tab] Switch  [F2] Open  [F5] Convert  [F9] Scheme"
+            shortcuts_x = max(10, max_x - len(bar_shortcuts) - 2)
+            avail_status = max(10, shortcuts_x - 4)
 
-        status_prefix = "[OK] " if not state.status_is_error else "[ERR] "
-        status_text = f"{status_prefix}{state.status_message}"[:avail_status]
-        safe_addstr(stdscr, footer_y, 2, status_text, hdr_attr | curses.A_BOLD)
-        safe_addstr(stdscr, footer_y, shortcuts_x, bar_shortcuts, hdr_attr)
+            status_prefix = "[OK] " if not state.status_is_error else "[ERR] "
+            status_text = f"{status_prefix}{state.status_message}"[:avail_status]
+            safe_addstr(stdscr, footer_y, 2, status_text, hdr_attr | curses.A_BOLD)
+            safe_addstr(stdscr, footer_y, shortcuts_x, bar_shortcuts, hdr_attr)
 
         stdscr.refresh()
 
@@ -547,7 +617,10 @@ def run_commander_tui(
                 stdscr.refresh()
                 if chosen:
                     if not state.load_dataset(chosen):
-                        show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
+                        if state.last_missing_dependency:
+                            show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
+                        else:
+                            show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
 
             elif key in (curses.KEY_F3,):  # F3: Destination Folder
                 curses.def_prog_mode()
@@ -588,17 +661,37 @@ def run_commander_tui(
             elif key in (ord("r"), ord("R")):
                 state.randomize_seed()
 
+            elif key in (curses.KEY_F9, ord("9")):
+                state.toggle_theme()
+                init_colors(state.theme_mode)
+                if state.theme_mode == ThemeMode.NORTON:
+                    try:
+                        stdscr.bkgd(" ", get_color(COLOR_PANEL_BG))
+                    except curses.error:
+                        pass
+                    state.status_message = "Theme: Norton Commander (Classic Blue)"
+                else:
+                    try:
+                        stdscr.bkgd(" ", curses.color_pair(0))
+                    except curses.error:
+                        pass
+                    state.status_message = "Theme: Modern Terminal"
+                state.status_is_error = False
+                stdscr.clear()
+
             elif key in (9, curses.KEY_BTAB):  # Tab / Shift-Tab
                 state.active_panel = ActivePanel.RIGHT if state.active_panel == ActivePanel.LEFT else ActivePanel.LEFT
 
             # Navigation in Left Panel
             elif is_left:
-                if key in (curses.KEY_UP, ord("k")):
+                # Left arrow acts like Up arrow (switches UP)
+                if key in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
                     if state.left_focus_idx == 2 and state.selected_column_idx > 0:
                         state.selected_column_idx -= 1
                     else:
                         state.left_focus_idx = max(0, state.left_focus_idx - 1)
-                elif key in (curses.KEY_DOWN, ord("j")):
+                # Right arrow acts like Down arrow (switches DOWN)
+                elif key in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
                     if state.left_focus_idx == 2:
                         if state.loaded_dataset and state.selected_column_idx < len(state.loaded_dataset.columns) - 1:
                             state.selected_column_idx += 1
@@ -614,7 +707,10 @@ def run_commander_tui(
                         stdscr.refresh()
                         if chosen:
                             if not state.load_dataset(chosen):
-                                show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
+                                if state.last_missing_dependency:
+                                    show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
+                                else:
+                                    show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
                     elif state.left_focus_idx == 1:  # Edit path
                         new_path = show_text_edit_dialog(
                             stdscr,
@@ -624,35 +720,29 @@ def run_commander_tui(
                         )
                         if new_path:
                             if not state.load_dataset(new_path):
-                                show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
+                                if state.last_missing_dependency:
+                                    show_missing_dependency_dialog(stdscr, state.last_missing_dependency)
+                                else:
+                                    show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
 
             # Navigation in Right Panel
             elif is_right:
-                if key in (curses.KEY_UP, ord("k")):
+                # Left arrow acts like Up arrow (switches UP)
+                if key in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
                     state.right_focus_idx = (state.right_focus_idx - 1) % total_right_fields
-                elif key in (curses.KEY_DOWN, ord("j")):
+                # Right arrow acts like Down arrow (switches DOWN)
+                elif key in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
                     state.right_focus_idx = (state.right_focus_idx + 1) % total_right_fields
-                elif key in (curses.KEY_LEFT, ord("h")):
-                    if state.right_focus_idx == 0:
-                        # Cycle format backwards
-                        curr_i = formats_list.index(state.target_format)
-                        state.set_format(formats_list[(curr_i - 1) % len(formats_list)])
-                elif key in (curses.KEY_RIGHT, ord("l")):
-                    if state.right_focus_idx == 0:
-                        # Cycle format forwards
-                        curr_i = formats_list.index(state.target_format)
-                        state.set_format(formats_list[(curr_i + 1) % len(formats_list)])
 
                 elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
                     idx = state.right_focus_idx
-                    if idx == 0:
-                        # Toggle next format
-                        curr_i = formats_list.index(state.target_format)
-                        state.set_format(formats_list[(curr_i + 1) % len(formats_list)])
+                    if 0 <= idx <= 3:
+                        # Select target format directly
+                        state.set_format(formats_list[idx])
 
-                    elif 1 <= idx <= len(mapping_fields):
+                    elif 4 <= idx <= 3 + len(mapping_fields):
                         # Column mapping picker
-                        f_info = mapping_fields[idx - 1]
+                        f_info = mapping_fields[idx - 4]
                         cols = state.loaded_dataset.columns if state.loaded_dataset else []
                         chosen = show_column_picker_dialog(
                             stdscr,
@@ -663,7 +753,7 @@ def run_commander_tui(
                         )
                         state.set_mapping_field(f_info["key"], chosen)
 
-                    elif idx == 1 + len(mapping_fields):  # Train %
+                    elif idx == 4 + len(mapping_fields):  # Train %
                         val = show_text_edit_dialog(stdscr, "Train Split %", "Enter Train percentage (0-100):", f"{state.train_pct:.0f}", is_number=True)
                         if val:
                             try:
@@ -671,7 +761,7 @@ def run_commander_tui(
                             except ValueError:
                                 pass
 
-                    elif idx == 2 + len(mapping_fields):  # Valid %
+                    elif idx == 5 + len(mapping_fields):  # Valid %
                         val = show_text_edit_dialog(stdscr, "Valid Split %", "Enter Valid percentage (0-100):", f"{state.valid_pct:.0f}", is_number=True)
                         if val:
                             try:
@@ -679,7 +769,7 @@ def run_commander_tui(
                             except ValueError:
                                 pass
 
-                    elif idx == 3 + len(mapping_fields):  # Test %
+                    elif idx == 6 + len(mapping_fields):  # Test %
                         val = show_text_edit_dialog(stdscr, "Test Split %", "Enter Test percentage (0-100):", f"{state.test_pct:.0f}", is_number=True)
                         if val:
                             try:
@@ -687,7 +777,7 @@ def run_commander_tui(
                             except ValueError:
                                 pass
 
-                    elif idx == 4 + len(mapping_fields):  # Seed
+                    elif idx == 7 + len(mapping_fields):  # Seed
                         val = show_text_edit_dialog(stdscr, "Random Seed", "Enter random seed integer:", str(state.seed), is_number=True)
                         if val:
                             try:
@@ -695,10 +785,10 @@ def run_commander_tui(
                             except ValueError:
                                 pass
 
-                    elif idx == 5 + len(mapping_fields):  # Randomize button
+                    elif idx == 8 + len(mapping_fields):  # Randomize button
                         state.randomize_seed()
 
-                    elif idx == 6 + len(mapping_fields):  # Output Dir
+                    elif idx == 9 + len(mapping_fields):  # Output Dir
                         default_out = str(state.loaded_dataset.default_output_dir) if state.loaded_dataset else state.output_dir
                         chosen = show_output_destination_dialog(
                             stdscr,
@@ -711,7 +801,7 @@ def run_commander_tui(
                             state.status_message = f"Output folder set to: {state.output_dir}"
                             state.status_is_error = False
 
-                    elif idx == 7 + len(mapping_fields):  # Convert button
+                    elif idx == 10 + len(mapping_fields):  # Convert button
                         res = execute_conversion(stdscr, state)
                         if res is not None:
                             conversion_result = res

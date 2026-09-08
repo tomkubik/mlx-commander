@@ -391,7 +391,156 @@ class TestCommanderUI(unittest.TestCase):
         res = show_output_destination_dialog(self.mock_win, "/tmp/curr", "/tmp/default")
         self.assertEqual(res, "/tmp/default")
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_vertical_navigation_left_panel_arrows(self, mock_curs, mock_colors, mock_has_colors):
+        # Left panel starts at left_focus_idx = 0.
+        # Right arrow acts as Down (switches DOWN -> index 1)
+        # Right arrow acts as Down again (switches DOWN -> index 2)
+        # Left arrow acts as Up (switches UP -> index 1)
+        # Left arrow acts as Up (switches UP -> index 0)
+        state = CommanderState()
+        state.active_panel = ActivePanel.LEFT
+        state.left_focus_idx = 0
+
+        self.mock_win.getch.side_effect = [
+            curses.KEY_RIGHT,  # moves to index 1
+            curses.KEY_RIGHT,  # moves to index 2
+            curses.KEY_LEFT,   # moves back to index 1
+            ord("q"),          # quit
+        ]
+        run_commander_tui(self.mock_win, initial_state=state)
+        self.assertEqual(state.left_focus_idx, 1)
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_vertical_navigation_right_panel_and_format_toggle(self, mock_curs, mock_colors, mock_has_colors):
+        # Right panel: format toggles are stacked vertically at indices 0, 1, 2, 3.
+        # Starting at right_focus_idx = 0 (prompt_comp).
+        # Right arrow moves down to index 1 (chat).
+        # Enter selects format at index 1 -> target_format should become CHAT.
+        # Right arrow moves down to index 2 (text).
+        # Space selects format at index 2 -> target_format should become TEXT.
+        state = CommanderState()
+        state.active_panel = ActivePanel.RIGHT
+        state.right_focus_idx = 0
+
+        self.mock_win.getch.side_effect = [
+            curses.KEY_RIGHT,  # moves down to index 1 (chat)
+            10,                # Enter -> selects CHAT
+            curses.KEY_RIGHT,  # moves down to index 2 (text)
+            32,                # Space -> selects TEXT
+            curses.KEY_LEFT,   # moves up back to index 1 (chat)
+            ord("q"),          # quit
+        ]
+        run_commander_tui(self.mock_win, initial_state=state)
+        self.assertEqual(state.target_format, MLXFormat.TEXT)
+        self.assertEqual(state.right_focus_idx, 1)
+
+    def test_dialog_left_right_arrow_navigation(self):
+        from mlx_commander.tui.widgets import run_menu, show_column_picker_dialog, show_output_destination_dialog
+
+        # show_column_picker_dialog: KEY_RIGHT acts as DOWN (selects option 1)
+        self.mock_win.getch.side_effect = [curses.KEY_RIGHT, 10]
+        chosen = show_column_picker_dialog(self.mock_win, "Pick Column", ["col_a", "col_b", "col_c"])
+        self.assertEqual(chosen, "col_b")
+
+        # show_column_picker_dialog: KEY_RIGHT then KEY_LEFT acts as DOWN then UP (selects option 0)
+        self.mock_win.getch.side_effect = [curses.KEY_RIGHT, curses.KEY_LEFT, 10]
+        chosen = show_column_picker_dialog(self.mock_win, "Pick Column", ["col_a", "col_b", "col_c"])
+        self.assertEqual(chosen, "col_a")
+
+        # run_menu: KEY_RIGHT acts as DOWN, KEY_LEFT acts as UP
+        self.mock_win.getch.side_effect = [curses.KEY_RIGHT, 10]
+        res = run_menu(self.mock_win, "Title", "Sub", [("Opt 0", "d0"), ("Opt 1", "d1")])
+        self.assertEqual(res, 1)
+
+        self.mock_win.getch.side_effect = [curses.KEY_RIGHT, curses.KEY_LEFT, 10]
+        res = run_menu(self.mock_win, "Title", "Sub", [("Opt 0", "d0"), ("Opt 1", "d1")])
+        self.assertEqual(res, 0)
+
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_norton_color_scheme_toggle_f9_and_9(self, mock_curs, mock_colors, mock_has_colors):
+        from mlx_commander.tui.state import ThemeMode
+        state = CommanderState()
+        self.assertEqual(state.theme_mode, ThemeMode.MODERN)
+
+        # Press F9 -> switches to Norton
+        # Press 9 -> switches back to Modern
+        # Press q -> quit
+        self.mock_win.getch.side_effect = [
+            curses.KEY_F9,
+            ord("9"),
+            ord("q"),
+        ]
+        run_commander_tui(self.mock_win, initial_state=state)
+        # Verify init_colors was called with both modern and norton
+        mock_colors.assert_any_call("modern")
+        mock_colors.assert_any_call("norton")
+        self.assertEqual(state.theme_mode, ThemeMode.MODERN)
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.curses.start_color")
+    @patch("mlx_commander.tui.app.curses.use_default_colors")
+    @patch("mlx_commander.tui.app.curses.init_pair")
+    def test_init_colors_modern_and_norton(self, mock_init_pair, mock_default, mock_start, mock_has_colors):
+        from mlx_commander.tui.app import init_colors
+        from mlx_commander.tui.widgets import (
+            COLOR_BANNER,
+            COLOR_BORDER_JOINTS,
+            COLOR_INPUT_NORMAL,
+            COLOR_PANEL_BG,
+            COLOR_TITLE_ACCENT,
+        )
+
+        init_colors("modern")
+        # Modern has white on blue banner, cyan borders
+        mock_init_pair.assert_any_call(COLOR_BANNER, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        mock_init_pair.assert_any_call(COLOR_BORDER_JOINTS, curses.COLOR_CYAN, -1)
+        mock_init_pair.assert_any_call(COLOR_INPUT_NORMAL, curses.COLOR_CYAN, -1)
+
+        mock_init_pair.reset_mock()
+        init_colors("norton")
+        # Norton has black on cyan banner, cyan borders on blue, yellow titles on blue, black on cyan inputs
+        mock_init_pair.assert_any_call(COLOR_BANNER, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        mock_init_pair.assert_any_call(COLOR_BORDER_JOINTS, curses.COLOR_CYAN, curses.COLOR_BLUE)
+        mock_init_pair.assert_any_call(COLOR_TITLE_ACCENT, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+        mock_init_pair.assert_any_call(COLOR_INPUT_NORMAL, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        mock_init_pair.assert_any_call(COLOR_PANEL_BG, curses.COLOR_WHITE, curses.COLOR_BLUE)
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_norton_bottom_bar_rendering(self, mock_curs, mock_colors, mock_has_colors):
+        from mlx_commander.tui.state import ThemeMode
+        state = CommanderState()
+        state.theme_mode = ThemeMode.NORTON
+
+        self.mock_win.getch.side_effect = [ord("q")]
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        # Verify that bottom bar was drawn with Norton Commander buttons
+        rendered_strings = [
+            call_args[0][2]
+            for call_args in self.mock_win.addstr.call_args_list
+            if len(call_args[0]) >= 3 and isinstance(call_args[0][2], str)
+        ]
+        full_rendered = " ".join(rendered_strings)
+        self.assertIn("Help", full_rendered)
+        self.assertIn("Open", full_rendered)
+        self.assertIn("Output", full_rendered)
+        self.assertIn("Convert", full_rendered)
+        self.assertIn("Scheme", full_rendered)
+        self.assertIn("Exit", full_rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
 

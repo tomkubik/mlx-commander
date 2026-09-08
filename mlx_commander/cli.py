@@ -24,6 +24,7 @@ from mlx_commander.formats import (
     auto_detect_mapping,
     validate_mapping,
 )
+from mlx_commander.exceptions import MissingDependencyError
 from mlx_commander.loader import load_local_dataset
 from mlx_commander.splitter import SplitConfig, generate_random_seed
 from mlx_commander.tui.app import launch_tui
@@ -288,6 +289,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         except KeyboardInterrupt:
             print("\nOperation cancelled.")
             return 130
+        except MissingDependencyError as e:
+            print(f"\nMissing Dependency Error:\n{e.format_name} format requires package '{e.package_name}'.", file=sys.stderr)
+            print(f"\nTo install, run:\n    {e.install_command}", file=sys.stderr)
+            print(f"or install optional extra:\n    {e.pip_extra}\n", file=sys.stderr)
+            return 1
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
@@ -308,6 +314,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         except (KeyboardInterrupt, EOFError):
             print("\nOperation cancelled.")
             return 130
+        except MissingDependencyError as e:
+            print(f"\nMissing Dependency Error:\n{e.format_name} format requires package '{e.package_name}'.", file=sys.stderr)
+            print(f"\nTo install, run:\n    {e.install_command}", file=sys.stderr)
+            print(f"or install optional extra:\n    {e.pip_extra}\n", file=sys.stderr)
+            return 1
         except Exception as e:
             print(f"\nError: {e}", file=sys.stderr)
             return 1

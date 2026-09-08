@@ -8,6 +8,19 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Semantic color pair constants
+COLOR_BANNER = 1         # Top Header Banner
+COLOR_BORDER_JOINTS = 2  # Borders, Frame, and Routing Joints
+COLOR_SUCCESS = 3        # Success, Checks
+COLOR_NORMAL_TEXT = 4    # Inactive Labels, Normal Text
+COLOR_ERROR = 5          # Error, Alerts
+COLOR_TITLE_ACCENT = 6   # Panel Titles / Hotkey Numbers
+COLOR_INPUT_NORMAL = 7   # User Toggleable Inputs / Buttons / Fields (Normal)
+COLOR_INPUT_FOCUSED = 8  # User Toggleable Inputs / Buttons / Fields (Focused)
+COLOR_FN_NUMBER = 9      # Norton Hotkey Bar: Key Number
+COLOR_FN_LABEL = 10      # Norton Hotkey Bar: Key Label
+COLOR_PANEL_BG = 11      # Panel Background Fill (Deep Blue in Norton)
+
 
 def safe_addstr(win: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
     """Safely print text inside a window without raising on border clip."""
@@ -134,9 +147,9 @@ def run_menu(
         stdscr.refresh()
 
         key = stdscr.getch()
-        if key in (curses.KEY_UP, ord("k")):
+        if key in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
             current_idx = max(0, current_idx - 1)
-        elif key in (curses.KEY_DOWN, ord("j")):
+        elif key in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
             current_idx = min(max_idx, current_idx + 1)
         elif key in (10, 13, curses.KEY_ENTER):
             return current_idx
@@ -330,6 +343,102 @@ def show_error_dialog(
             break
 
 
+def show_missing_dependency_dialog(
+    stdscr: curses.window,
+    exc: Any,
+) -> None:
+    """
+    Display a centered modal interstitial dialog when an unsupported dataset format
+    requires an uninstalled optional dependency (such as pyarrow, duckdb, or pylance).
+    Preserves the background dashboard without erasing the screen.
+    Inactive labels and titles are displayed in white; active interactive elements in teal.
+    """
+    import textwrap
+    configure_escdelay(25)
+    safe_curs_set(0)
+
+    max_y, max_x = stdscr.getmaxyx()
+
+    format_name = getattr(exc, "format_name", "Required Format")
+    package_name = getattr(exc, "package_name", "package")
+    install_command = getattr(exc, "install_command", f"pip install {package_name}")
+    extra_name = getattr(exc, "extra_name", package_name.replace("py", ""))
+    description = getattr(exc, "description", "")
+
+    w = min(max_x - 4, 76)
+    w = max(48, w)
+    inner_w = w - 6
+
+    raw_lines = [
+        f"The '{format_name}' format requires the '{package_name}' package.",
+    ]
+    if description:
+        raw_lines.append(description)
+    raw_lines.append("")
+    raw_lines.append("To enable support for this format, install the package:")
+
+    wrapped_lines: List[str] = []
+    for line in raw_lines:
+        if not line.strip():
+            wrapped_lines.append("")
+            continue
+        wrapped = textwrap.wrap(line, width=inner_w, break_long_words=True)
+        wrapped_lines.extend(wrapped if wrapped else [""])
+
+    extra_cmd = f"pip install 'mlx-commander[{extra_name}]'"
+    cmd_box_width = min(inner_w, max(len(install_command) + 6, len(extra_cmd) + 6, 38))
+
+    h = len(wrapped_lines) + 3 + 4 + 3
+    h = min(h, max_y - 4)
+
+    start_y = max(1, (max_y - h) // 2)
+    start_x = max(1, (max_x - w) // 2)
+
+    border_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+    title_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    label_attr = get_color(4) if safe_has_colors() else 0
+    active_teal = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+    action_attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+
+    while True:
+        safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", border_attr)
+        title_str = f" [!] Dependency Required: {format_name} "[: w - 4]
+        safe_addstr(stdscr, start_y, start_x + 2, title_str, title_attr)
+
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", border_attr)
+
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", border_attr)
+
+        curr_y = start_y + 2
+        for l in wrapped_lines:
+            if curr_y >= start_y + h - 6:
+                break
+            safe_addstr(stdscr, curr_y, start_x + 3, l[:inner_w], label_attr)
+            curr_y += 1
+
+        curr_y += 1
+        if curr_y < start_y + h - 4:
+            safe_addstr(stdscr, curr_y, start_x + 4, "┌" + "─" * (cmd_box_width - 2) + "┐", active_teal)
+            cmd_text = f"  {install_command}".ljust(cmd_box_width - 2)
+            safe_addstr(stdscr, curr_y + 1, start_x + 4, f"│{cmd_text}│", active_teal)
+            safe_addstr(stdscr, curr_y + 2, start_x + 4, "└" + "─" * (cmd_box_width - 2) + "┘", active_teal)
+            curr_y += 3
+
+        if curr_y < start_y + h - 2:
+            hint_str = f"Or install optional extra: {extra_cmd}"
+            safe_addstr(stdscr, curr_y, start_x + 4, hint_str[:inner_w], label_attr)
+
+        hint = "[Enter] OK   [Esc] Dismiss"
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, hint, action_attr)
+
+        stdscr.refresh()
+
+        k = stdscr.getch()
+        if k in (10, 13, 32, 27, ord("q"), ord("Q")):
+            break
+
+
 def show_message_dialog(
     stdscr: curses.window,
     title: str,
@@ -398,12 +507,12 @@ def draw_box_panel(
     is_focused: bool = False,
     subtitle: str = "",
 ) -> None:
-    """Draw a styled box panel with white title and teal/dim active focus border."""
+    """Draw a styled box panel with title and active focus border."""
     if h <= 2 or w <= 4:
         return
 
-    border_attr = (get_color(2) | curses.A_BOLD) if (is_focused and safe_has_colors()) else (curses.A_DIM)
-    title_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    border_attr = (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if (is_focused and safe_has_colors()) else get_color(COLOR_BORDER_JOINTS)
+    title_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
 
     safe_addstr(win, y, x, "┌─ ", border_attr)
     title_text = f"{title} "
@@ -411,7 +520,7 @@ def draw_box_panel(
     curr_x = x + 3 + len(title_text)
     if subtitle:
         sub_text = f"[{subtitle}] "
-        safe_addstr(win, y, curr_x, sub_text, (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        safe_addstr(win, y, curr_x, sub_text, (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
         curr_x += len(sub_text)
     avail_line = max(0, (x + w - 1) - curr_x)
     if avail_line > 0:
@@ -427,12 +536,12 @@ def draw_box_panel(
 
 
 def draw_button(win: curses.window, y: int, x: int, label: str, is_focused: bool = False) -> None:
-    """Draw an interactive button in teal (active input element)."""
+    """Draw an interactive button with Norton Commander input background or modern active teal."""
     btn_str = f"[ {label} ]"
     if is_focused:
-        attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     else:
-        attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     safe_addstr(win, y, x, btn_str, attr)
 
 
@@ -444,15 +553,15 @@ def draw_radio(
     is_checked: bool = False,
     is_focused: bool = False,
 ) -> None:
-    """Draw an interactive radio button option in teal (active selection element)."""
+    """Draw an interactive radio button option with Norton Commander input background or modern active teal."""
     mark = "●" if is_checked else " "
     radio_str = f"({mark}) {label}"
     if is_focused:
-        attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     elif is_checked:
-        attr = (get_color(2) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     else:
-        attr = get_color(2) if safe_has_colors() else 0
+        attr = get_color(COLOR_INPUT_NORMAL) if safe_has_colors() else 0
     safe_addstr(win, y, x, radio_str, attr)
 
 
@@ -466,9 +575,9 @@ def draw_field(
     val_width: int = 24,
     has_dropdown: bool = False,
 ) -> None:
-    """Draw a labeled form field with white inactive label and teal active input box."""
+    """Draw a labeled form field with white inactive label and active input box."""
     lbl = f"{label}: "
-    lbl_attr = (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+    lbl_attr = (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     safe_addstr(win, y, x, lbl, lbl_attr)
     val_x = x + len(lbl)
 
@@ -482,9 +591,9 @@ def draw_field(
     box_str = f"[ {disp_val}{pad}{arrow} ]"
 
     if is_focused:
-        attr = (get_color(2) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+        attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_STANDOUT | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     else:
-        attr = get_color(2) if safe_has_colors() else 0
+        attr = (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
     safe_addstr(win, y, val_x, box_str, attr)
 
 
@@ -599,9 +708,9 @@ def show_column_picker_dialog(
         stdscr.refresh()
 
         k = stdscr.getch()
-        if k in (curses.KEY_UP, ord("k")):
+        if k in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
             sel_idx = max(0, sel_idx - 1)
-        elif k in (curses.KEY_DOWN, ord("j")):
+        elif k in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
             sel_idx = min(len(options) - 1, sel_idx + 1)
         elif k == 32:  # Spacebar: toggle selection
             space_used = True
@@ -767,9 +876,9 @@ def show_output_destination_dialog(
         stdscr.refresh()
 
         k = stdscr.getch()
-        if k in (curses.KEY_UP, ord("k")):
+        if k in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
             sel_idx = (sel_idx - 1) % len(options)
-        elif k in (curses.KEY_DOWN, ord("j")):
+        elif k in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
             sel_idx = (sel_idx + 1) % len(options)
         elif k in (27, ord("q"), ord("Q")):
             return None
@@ -846,19 +955,20 @@ def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
 def show_help_dialog(stdscr: curses.window) -> None:
     """Modal dialog displaying all keyboard shortcuts."""
     max_y, max_x = stdscr.getmaxyx()
-    h = min(17, max_y - 2)
+    h = min(18, max_y - 2)
     w = min(72, max_x - 4)
     start_y = max(1, (max_y - h) // 2)
     start_x = max(1, (max_x - w) // 2)
 
     shortcuts = [
         ("Tab / Shift-Tab", "Switch focus between Left (Dataset) and Right (Config) panels"),
-        ("↑ / ↓ (or k / j)", "Navigate through fields, options, and buttons in active panel"),
-        ("← / → (or h / l)", "Toggle MLX format radio options"),
-        ("Enter / Space", "Open column dropdown, edit field value, or trigger button"),
+        ("↑ / ↓ (or k / j)", "Navigate vertically through fields, options, and buttons"),
+        ("← / → (or h / l)", "Vertical navigation (← switches up, → switches down)"),
+        ("Enter / Space", "Select format toggle, open column dropdown, or edit field"),
         ("F2", "Open native macOS Finder upload / dataset picker"),
         ("F3", "Open macOS Finder to choose output destination folder"),
         ("F5", "Run conversion and write train/valid/test JSONL files"),
+        ("F9 (or 9)", "Toggle color scheme (Norton Commander <-> Modern)"),
         ("r / R", "Randomize split seed"),
         ("? / F1", "Show this help screen"),
         ("F10 / q / Esc", "Exit MLX-Commander"),

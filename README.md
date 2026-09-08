@@ -37,17 +37,14 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 Launch the interactive dashboard using any of these equivalent commands:
 
 ```bash
-# Recommended for ZIP downloads (no chmod needed, no -m parameter):
+# Recommended for local repository execution:
 python3 run.py
-
-# Or execute current folder directly:
-python3 .
 
 # Or as a Python package module:
 python3 -m mlx_commander
 
-# Or via executable runner:
-./mlx-commander
+# Or via zero-install uvx:
+uvx mlx-commander
 ```
 
 You can also pass arguments directly (e.g. pre-loading a dataset or multiple files):
@@ -283,8 +280,7 @@ MLX-Commander includes a built-in MCP server that works over `stdio`.
 ### Agent Skill (`SKILL.md`)
 
 A standardized skill specification is included in the repository:
-- Workspace location: [`.agents/skills/mlx-dataset-prep/SKILL.md`](.agents/skills/mlx-dataset-prep/SKILL.md)
-- Root location: [`skills/mlx-dataset-prep/SKILL.md`](skills/mlx-dataset-prep/SKILL.md)
+- Skill path: [`.agents/skills/mlx-dataset-prep/SKILL.md`](.agents/skills/mlx-dataset-prep/SKILL.md)
 
 AI agents that support skill discovery (like **Antigravity**) automatically read this file when users ask to convert datasets or fine-tune models with Apple MLX.
 

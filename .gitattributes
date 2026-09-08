@@ -1,0 +1,9 @@
+# Export ignore: exclude test suites and development artifacts from GitHub release archives and zip downloads
+tests/ export-ignore
+tests/** export-ignore
+.agents/ export-ignore
+.agents/** export-ignore
+.github/ export-ignore
+.github/** export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore

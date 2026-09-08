@@ -11,6 +11,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from mlx_commander.exceptions import MissingDependencyError
 from mlx_commander.converter import ConversionResult, convert_and_save
 from mlx_commander.formats import (
     ColumnMapping,
@@ -33,10 +34,16 @@ class ActivePanel(Enum):
     PREVIEW = "preview"
 
 
+class ThemeMode(str, Enum):
+    MODERN = "modern"
+    NORTON = "norton"
+
+
 @dataclass
 class CommanderState:
     dataset_path: str = ""
     loaded_dataset: Optional[LoadedDataset] = None
+    last_missing_dependency: Optional[MissingDependencyError] = None
     target_format: MLXFormat = MLXFormat.PROMPT_COMPLETION
     mapping: ColumnMapping = field(default_factory=ColumnMapping)
     train_pct: float = 80.0
@@ -45,6 +52,9 @@ class CommanderState:
     seed: int = field(default_factory=generate_random_seed)
     output_dir: str = ""
     has_custom_output_dir: bool = False
+
+    # Theme
+    theme_mode: str = ThemeMode.MODERN
 
     # UI navigation state
     active_panel: ActivePanel = ActivePanel.LEFT
@@ -84,6 +94,7 @@ class CommanderState:
             self.status_is_error = True
             return False
 
+        self.last_missing_dependency = None
         try:
             self.status_message = "Loading dataset..."
             self.status_is_error = False
@@ -92,6 +103,10 @@ class CommanderState:
             self.dataset_path = ds.source_path
             self.selected_column_idx = 0
             self.column_scroll_offset = 0
+
+            # If the dataset contains only a "text" column and user has not switched format, default to TEXT format
+            if ds.columns == ["text"] and self.target_format == MLXFormat.PROMPT_COMPLETION:
+                self.target_format = MLXFormat.TEXT
 
             # Auto-detect column mapping for current format
             auto = auto_detect_mapping(self.target_format, ds.columns)
@@ -117,6 +132,11 @@ class CommanderState:
             self.status_is_error = False
             self.update_preview()
             return True
+        except MissingDependencyError as e:
+            self.last_missing_dependency = e
+            self.status_message = f"Missing dependency: {e.package_name} ({e.install_command})"
+            self.status_is_error = True
+            return False
         except Exception as e:
             self.status_message = f"Failed to load: {e}"
             self.status_is_error = True
@@ -196,6 +216,14 @@ class CommanderState:
                     has_custom_field = True
                     break
 
+        # Theme prefill
+        theme_val = config.get("theme") or config.get("theme_mode")
+        if theme_val:
+            if str(theme_val).lower().strip() in ("norton", "nc", "blue", "classic"):
+                self.theme_mode = ThemeMode.NORTON
+            else:
+                self.theme_mode = ThemeMode.MODERN
+
         # Dataset loading
         ds_path = config.get("dataset") or config.get("dataset_path") or self.dataset_path
         if ds_path:
@@ -203,6 +231,14 @@ class CommanderState:
             # Switch active panel to RIGHT so user immediately sees mappings, splits, and preview
             self.active_panel = ActivePanel.RIGHT
             self.right_focus_idx = 0
+
+    def toggle_theme(self) -> str:
+        """Toggle between Modern and Norton Commander color schemes."""
+        if self.theme_mode == ThemeMode.NORTON:
+            self.theme_mode = ThemeMode.MODERN
+        else:
+            self.theme_mode = ThemeMode.NORTON
+        return self.theme_mode
 
     def set_format(self, fmt: MLXFormat) -> None:
         """Change MLX target format and re-detect mappings if appropriate."""
