@@ -148,3 +148,59 @@ def spawn_terminal_tui(
                     os.remove(fpath)
                 except OSError:
                     pass
+
+
+def spawn_lora_queue_terminal(
+    queue_dir: str,
+    working_dir: Optional[str] = None,
+) -> bool:
+    """
+    Launch the LoRA queue runner in a dedicated detached macOS Terminal.app window.
+    Runs python3 -m mlx_commander --run-queue <queue_dir> sequentially.
+    Returns True if successfully spawned.
+    """
+    if not is_macos():
+        return False
+
+    cwd = working_dir or os.getcwd()
+    run_id = uuid.uuid4().hex[:10]
+    script_file = os.path.join(tempfile.gettempdir(), f"mlx_lora_runner_{run_id}.sh")
+    escaped_cwd = shlex.quote(cwd)
+    python_exe = sys.executable
+    cmd_parts = [shlex.quote(python_exe), "-m", "mlx_commander", "--run-queue", shlex.quote(str(queue_dir))]
+    exec_cmd = " ".join(cmd_parts)
+
+    script_lines = [
+        "#!/usr/bin/env bash",
+        f"cd {escaped_cwd}",
+        'echo "=========================================================="',
+        'echo " Apple MLX LoRA Sequential Queue Runner"',
+        'echo " Running detached in dedicated Terminal window"',
+        'echo " You may close MLX Commander without interrupting runs"',
+        'echo "=========================================================="',
+        'echo ""',
+        exec_cmd,
+        'EC=$?',
+        'echo ""',
+        'if [ $EC -eq 0 ]; then',
+        '  echo "[OK] All queue runs finished successfully."',
+        'else',
+        '  echo "[!] Queue finished with errors (code $EC)."',
+        'fi',
+        'echo "Press any key to close this terminal window..."',
+        'read -n 1 -s',
+        'exit $EC',
+    ]
+    with open(script_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(script_lines) + "\n")
+    os.chmod(script_file, 0o755)
+
+    applescript = (
+        f'tell application "Terminal"\n'
+        f'    activate\n'
+        f'    do script "{script_file}"\n'
+        f'end tell\n'
+    )
+    proc = subprocess.run(["osascript", "-e", applescript], capture_output=True, text=True, check=False)
+    return proc.returncode == 0
+

@@ -26,6 +26,13 @@ from mlx_commander.splitter import (
     calculate_split_counts,
     generate_random_seed,
 )
+from mlx_commander.lora import (
+    LoraRunConfig,
+    QueueManager,
+    calculate_implied_epochs,
+    estimate_duration,
+    estimate_peak_memory,
+)
 
 
 class ActivePanel(Enum):
@@ -81,6 +88,17 @@ class CommanderState:
     preview_cache: List[str] = field(default_factory=list)
     preview_error: Optional[str] = None
 
+    # Screen / Mode Navigation
+    active_tab: int = 0  # 0: Dataset Conversion, 1: LoRA Fine-Tuning
+
+    # LoRA Fine-Tuning State
+    lora_config: LoraRunConfig = field(default_factory=LoraRunConfig)
+    queue_manager: Optional[QueueManager] = None
+    selected_queue_idx: int = 0
+    lora_active_panel: str = "left"  # "left", "right", "queue"
+    lora_left_focus_idx: int = 0   # 0: Dataset path, 1: Model, 2: Type, 3: Mode, 4: Optim, 5: Finder F2
+    lora_right_focus_idx: int = 0  # 0: iters, 1: batch, 2: lr, 3: layers, 4: rank, 5: alpha, 6: dropout, 7: seq_len, 8: grad_chk, 9: mask_pmt, 10: out, 11: add_to_queue
+
     def __post_init__(self) -> None:
         if self.output_dir:
             self.has_custom_output_dir = True
@@ -96,6 +114,68 @@ class CommanderState:
                     self.output_dir = str(Path.cwd() / "mlx_dataset")
             else:
                 self.output_dir = str(Path.cwd() / "mlx_dataset")
+
+        if self.queue_manager is None:
+            self.queue_manager = QueueManager(Path.cwd() / "mlx_runs")
+        self.sync_dataset_to_lora()
+
+    def get_implied_epochs(self) -> Optional[float]:
+        """Calculate implied epochs: (iters * batch_size) / train_records."""
+        train_count = 0
+        if self.loaded_dataset:
+            split_counts = self.get_split_counts()
+            train_count = split_counts.get("train", 0)
+        if train_count == 0 and self.lora_config.data:
+            train_f = Path(self.lora_config.data) / "train.jsonl"
+            if train_f.exists():
+                try:
+                    with open(train_f, "rb") as f:
+                        train_count = sum(1 for _ in f)
+                except Exception:
+                    pass
+        return calculate_implied_epochs(self.lora_config.iters, self.lora_config.batch_size, train_count)
+
+    def get_memory_estimate(self) -> Dict[str, Any]:
+        return estimate_peak_memory(self.lora_config)
+
+    def get_duration_estimate(self) -> Dict[str, Any]:
+        return estimate_duration(self.lora_config)
+
+    def sync_dataset_to_lora(self) -> None:
+        """Pre-populate the LoRA dataset directory from the active conversion target or source."""
+        if self.output_dir and (Path(self.output_dir) / "train.jsonl").exists():
+            self.lora_config.data = str(self.output_dir)
+        elif self.output_dir:
+            self.lora_config.data = str(self.output_dir)
+        elif self.dataset_path:
+            self.lora_config.data = str(self.dataset_path)
+
+    def add_current_lora_to_queue(self) -> LoraRunConfig:
+        """Add current form config as a new run in the queue."""
+        if not self.queue_manager:
+            self.queue_manager = QueueManager(Path.cwd() / "mlx_runs")
+        import time, uuid
+        run = LoraRunConfig.from_dict(self.lora_config.to_dict())
+        run.id = f"run_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+        run.status = "queued"
+        run.started_at = None
+        run.finished_at = None
+        run.exit_code = None
+        run.error_message = None
+        run.adapter_path = f"adapters/{run.id}"
+        self.queue_manager.add_run(run)
+        self.selected_queue_idx = len(self.queue_manager.runs) - 1
+        return run
+
+    def load_queue_run_into_form(self, run_id: str) -> bool:
+        """Load a selected run from the queue back into the form fields."""
+        if not self.queue_manager:
+            return False
+        r = self.queue_manager.get_run(run_id)
+        if r:
+            self.lora_config = LoraRunConfig.from_dict(r.to_dict())
+            return True
+        return False
 
     def load_dataset(self, path_input: Any, custom_mapping: Optional[ColumnMapping] = None) -> bool:
         """Load dataset from disk (single file/folder or multiple merged files) and update state."""
@@ -241,6 +321,14 @@ class CommanderState:
             # Switch active panel to RIGHT so user immediately sees mappings, splits, and preview
             self.active_panel = ActivePanel.RIGHT
             self.right_focus_idx = 0
+        # Mode / Active Tab
+        tab_val = config.get("active_tab") or config.get("tab") or config.get("mode")
+        if tab_val is not None:
+            if str(tab_val).lower().strip() in ("1", "lora", "fine_tune", "finetune"):
+                self.active_tab = 1
+                self.sync_dataset_to_lora()
+            elif str(tab_val).lower().strip() in ("0", "dataset", "convert"):
+                self.active_tab = 0
 
     def toggle_theme(self) -> str:
         """Toggle between Modern and Norton Commander color schemes."""

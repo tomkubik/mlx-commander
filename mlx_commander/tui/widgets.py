@@ -1010,19 +1010,24 @@ def show_results_dialog(stdscr: curses.window, result: Any, *args: Any) -> None:
 def show_help_dialog(stdscr: curses.window) -> None:
     """Modal dialog displaying all keyboard shortcuts."""
     max_y, max_x = stdscr.getmaxyx()
-    h = min(18, max_y - 2)
-    w = min(72, max_x - 4)
+    h = min(22, max_y - 2)
+    w = min(74, max_x - 4)
     start_y = max(1, (max_y - h) // 2)
     start_x = max(1, (max_x - w) // 2)
 
     shortcuts = [
-        ("Tab / Shift-Tab", "Switch focus between Left (Dataset) and Right (Config) panels"),
-        ("↑ / ↓ (or k / j)", "Navigate vertically through fields, options, and buttons"),
-        ("← / → (or h / l)", "Vertical navigation (← switches up, → switches down)"),
-        ("Enter / Space", "Select format toggle, open column dropdown, or edit field"),
-        ("F2", "Open native macOS Finder upload / dataset picker"),
+        ("F4", "Switch Mode: Dataset Converter <-> LoRA Fine-Tuning"),
+        ("Tab / Shift-Tab", "Cycle focus between active screen panels"),
+        ("↑ / ↓ (or k / j)", "Navigate vertically through fields, options, and queue"),
+        ("← / → (or h / l)", "Navigate horizontally between columns"),
+        ("Enter / Space", "Edit field, toggle value, or load queued run"),
+        ("F2", "Open macOS Finder (Dataset file or directory picker)"),
         ("F3", "Open macOS Finder to choose output destination folder"),
-        ("F5", "Run conversion and write train/valid/test JSONL files"),
+        ("F5", "Run conversion (Mode 1) or Execute Queue (Mode 2)"),
+        ("F6", "Add current configuration to LoRA Queue (Mode 2)"),
+        ("c", "Clone selected LoRA run in Queue (Mode 2)"),
+        ("d", "Delete selected LoRA run from Queue (Mode 2)"),
+        ("x", "Clear LoRA Queue (Mode 2)"),
         ("F9", "Toggle color scheme (Norton Commander <-> Modern)"),
         ("r / R", "Randomize split seed"),
         ("? / F1", "Show this help screen"),
@@ -1437,3 +1442,251 @@ def draw_mapping_pipeline_panel(
     if curr_y < y + h:
         left_bot = fmt_border("└", "┘", "", box_w)
         safe_addstr(win, curr_y, left_x, left_bot, border_attr)
+
+
+def draw_queue_table(
+    win: curses.window,
+    y: int,
+    x: int,
+    h: int,
+    w: int,
+    runs: List[Any],
+    selected_idx: int = 0,
+    is_focused: bool = False,
+    scroll_offset: int = 0,
+) -> int:
+    """
+    Draw a scrollable table of queued LoRA runs with columns:
+    Index, Name / Model, Batch, Iters, LR, Rank, Layers, Status.
+    Returns the adjusted scroll_offset.
+    """
+    if h < 2 or w < 30:
+        return 0
+
+    header_y = y
+    avail_rows = h - 1
+
+    # Fixed column widths
+    col_idx = f"{'#':<3}"
+    col_status = f"{'Status':<9}"
+    col_b = f"{'Batch':<5}"
+    col_it = f"{'Iters':<6}"
+    col_lr = f"{'LR':<7}"
+    col_r = f"{'Rank':<4}"
+    col_l = f"{'Lyrs':<4}"
+
+    fixed_w = len(col_idx) + 1 + len(col_b) + 1 + len(col_it) + 1 + len(col_lr) + 1 + len(col_r) + 1 + len(col_l) + 1 + len(col_status)
+    name_w = max(12, w - fixed_w - 4)
+
+    header_line = f" {col_idx} {'Run Name / Model':<{name_w}} {col_b} {col_it} {col_lr} {col_r} {col_l} {col_status}"
+    safe_addstr(win, header_y, x, header_line[:w], (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+
+    if not runs:
+        safe_addstr(win, header_y + 1, x + 2, "(Queue is empty. Press [F6] to add current configuration to queue)", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        return 0
+
+    # Adjust scroll_offset
+    if selected_idx < scroll_offset:
+        scroll_offset = selected_idx
+    elif selected_idx >= scroll_offset + avail_rows:
+        scroll_offset = selected_idx - avail_rows + 1
+
+    for r_i in range(avail_rows):
+        idx = scroll_offset + r_i
+        row_y = header_y + 1 + r_i
+        if idx >= len(runs):
+            break
+
+        run = runs[idx]
+        is_sel = (idx == selected_idx)
+        prefix = "▶" if is_sel else " "
+
+        idx_str = f"{idx + 1}."
+        name_str = getattr(run, "name", "") or getattr(run, "model", "").split("/")[-1]
+        if len(name_str) > name_w:
+            name_str = name_str[:name_w - 1] + "…"
+
+        b_str = str(getattr(run, "batch_size", 4))
+        it_str = str(getattr(run, "iters", 1000))
+        lr_raw = getattr(run, "learning_rate", 1e-5)
+        lr_str = f"{lr_raw:g}"
+        r_str = str(getattr(run, "lora_rank", 8))
+        l_str = str(getattr(run, "num_layers", 16))
+
+        status_raw = getattr(run, "status", "queued").lower()
+        if status_raw == "running":
+            st_text = "[RUNNING]"
+            st_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        elif status_raw == "completed":
+            st_text = "[DONE]"
+            st_attr = (get_color(COLOR_SUCCESS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        elif status_raw == "failed":
+            st_text = "[FAILED]"
+            st_attr = (get_color(COLOR_ERROR) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+        else:
+            st_text = "[QUEUED]"
+            st_attr = (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+
+        row_main = f"{prefix}{idx_str:<3} {name_str:<{name_w}} {b_str:<5} {it_str:<6} {lr_str:<7} {r_str:<4} {l_str:<4} "
+        row_str = f"{row_main}{st_text:<9}"
+
+        if is_sel and is_focused:
+            attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+            safe_addstr(win, row_y, x, row_str[:w], attr)
+        elif is_sel:
+            attr = (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+            safe_addstr(win, row_y, x, row_main[:w], attr)
+            st_x = x + len(row_main)
+            if st_x < x + w:
+                safe_addstr(win, row_y, st_x, st_text[:(x + w - st_x)], st_attr)
+        else:
+            attr = get_color(COLOR_NORMAL_TEXT) if safe_has_colors() else 0
+            safe_addstr(win, row_y, x, row_main[:w], attr)
+            st_x = x + len(row_main)
+            if st_x < x + w:
+                safe_addstr(win, row_y, st_x, st_text[:(x + w - st_x)], st_attr)
+
+    return scroll_offset
+
+
+def show_model_picker_dialog(
+    stdscr: curses.window,
+    current_model: str = "",
+) -> Optional[str]:
+    """
+    Modal dialog to pick a base model from popular Apple MLX 4-bit models or enter custom/local path.
+    """
+    from mlx_commander.lora import POPULAR_MLX_MODELS
+
+    configure_escdelay(25)
+    options: List[Tuple[str, str]] = list(POPULAR_MLX_MODELS)
+    options.append(("[ Custom HuggingFace Repo / Local Path... ]", "Enter custom repo ID or local checkpoint path"))
+
+    sel_idx = 0
+    for i, (m_id, _) in enumerate(options):
+        if m_id == current_model:
+            sel_idx = i
+            break
+
+    max_y, max_x = stdscr.getmaxyx()
+    h = min(len(options) + 6, max_y - 4, 16)
+    w = min(max_x - 4, 76)
+    start_y = max(1, (max_y - h) // 2)
+    start_x = max(1, (max_x - w) // 2)
+
+    safe_curs_set(0)
+
+    while True:
+        safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " Select Base Model for Fine-Tuning ", (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(COLOR_BORDER_JOINTS) if safe_has_colors() else 0)
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+
+        visible_rows = h - 4
+        scroll_offset = max(0, sel_idx - visible_rows // 2)
+        if sel_idx < scroll_offset:
+            scroll_offset = sel_idx
+        elif sel_idx >= scroll_offset + visible_rows:
+            scroll_offset = sel_idx - visible_rows + 1
+
+        for r in range(visible_rows):
+            opt_idx = scroll_offset + r
+            row_y = start_y + 1 + r
+            if opt_idx < len(options):
+                m_id, desc = options[opt_idx]
+                is_focused = (opt_idx == sel_idx)
+                prefix = " ▶ " if is_focused else "   "
+                short_m = m_id if len(m_id) <= 42 else m_id.split("/")[-1]
+                line_str = f"{prefix}{short_m:<42} {desc}"[: w - 4]
+                if is_focused:
+                    attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+                else:
+                    attr = get_color(COLOR_BORDER_JOINTS) if safe_has_colors() else 0
+                safe_addstr(stdscr, row_y, start_x + 1, line_str, attr)
+
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "[Enter/Space] Select   [Esc] Cancel", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        stdscr.refresh()
+
+        k = stdscr.getch()
+        if k in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
+            sel_idx = max(0, sel_idx - 1)
+        elif k in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
+            sel_idx = min(len(options) - 1, sel_idx + 1)
+        elif k in (27, ord("q"), ord("Q")):
+            return None
+        elif k in (10, 13, 32):  # Enter or Space
+            chosen_id = options[sel_idx][0]
+            if chosen_id.startswith("[ Custom"):
+                val = show_text_edit_dialog(
+                    stdscr,
+                    "Custom Model",
+                    "Enter HuggingFace repo ID (e.g. mlx-community/...) or local directory path:",
+                    default_val=current_model,
+                )
+                if val and val.strip():
+                    return val.strip()
+                return None
+            return chosen_id
+
+
+def show_choice_dialog(
+    stdscr: curses.window,
+    title: str,
+    prompt: str,
+    choices: List[str],
+    current_val: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Modal dialog to select a single choice from a list (e.g. optimizer, fine_tune_type).
+    """
+    configure_escdelay(25)
+    sel_idx = 0
+    if current_val and current_val in choices:
+        sel_idx = choices.index(current_val)
+
+    max_y, max_x = stdscr.getmaxyx()
+    h = min(len(choices) + 6, max_y - 4, 14)
+    w = min(max_x - 4, 54)
+    start_y = max(1, (max_y - h) // 2)
+    start_x = max(1, (max_x - w) // 2)
+
+    safe_curs_set(0)
+
+    while True:
+        safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, f" {title} ", (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(COLOR_BORDER_JOINTS) if safe_has_colors() else 0)
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+
+        safe_addstr(stdscr, start_y + 1, start_x + 3, prompt[:w - 6], (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+
+        for i, c in enumerate(choices):
+            row_y = start_y + 3 + i
+            if row_y >= start_y + h - 2:
+                break
+            is_focused = (i == sel_idx)
+            is_curr = (c == current_val)
+            prefix = " ▶ " if is_focused else "   "
+            bullet = "(*)" if is_curr else "( )"
+            line_str = f"{prefix}{bullet} {c}"[: w - 4]
+            if is_focused:
+                attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+            else:
+                attr = get_color(COLOR_BORDER_JOINTS) if safe_has_colors() else 0
+            safe_addstr(stdscr, row_y, start_x + 2, line_str, attr)
+
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "[Enter] Select   [Esc] Cancel", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        stdscr.refresh()
+
+        k = stdscr.getch()
+        if k in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
+            sel_idx = (sel_idx - 1) % len(choices)
+        elif k in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
+            sel_idx = (sel_idx + 1) % len(choices)
+        elif k in (27, ord("q"), ord("Q")):
+            return None
+        elif k in (10, 13, 32):  # Enter or Space
+            return choices[sel_idx]
+

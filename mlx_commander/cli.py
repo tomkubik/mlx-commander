@@ -183,6 +183,19 @@ Examples:
         dest="wizard",
         help="Run sequential step-by-step terminal wizard instead of persistent MLX Commander dashboard.",
     )
+    parser.add_argument(
+        "--lora",
+        action="store_true",
+        help="Launch TUI directly in LoRA Fine-Tuning mode (Mode 2).",
+    )
+    parser.add_argument(
+        "--run-queue",
+        nargs="?",
+        const="mlx_runs",
+        type=str,
+        default=None,
+        help="Execute LoRA fine-tuning runs sequentially from queue directory (default: 'mlx_runs').",
+    )
 
     return parser
 
@@ -264,6 +277,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.mcp:
         from mlx_commander.mcp_server import run_mcp_server
         return run_mcp_server()
+
+    # Case 0: Sequential LoRA queue execution
+    if args.run_queue is not None:
+        from mlx_commander.lora import run_lora_queue
+        q_dir = Path(args.run_queue)
+        ok = run_lora_queue(q_dir)
+        return 0 if ok else 1
 
     # Normalize dataset path argument
     dataset_input = None
@@ -366,6 +386,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         prefill_dict["output"] = args.output
     if dataset_input:
         prefill_dict["dataset"] = dataset_input
+    if args.lora:
+        prefill_dict["tab"] = 1
+        prefill_dict["active_tab"] = 1
 
     # Check if external terminal window should be spawned
     from mlx_commander.terminal_spawner import is_macos, spawn_terminal_tui

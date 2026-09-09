@@ -145,9 +145,60 @@ usage: mlx_commander [-h] [-v] [-d DATASET [DATASET ...]]
 | `--manifest-file`| Custom file path where machine-readable `mlx_manifest.json` will be saved. |
 | `--prefill-state`| Pre-populate TUI state from a JSON string or path to JSON file. |
 | `--spawn-terminal`| Launch interactive TUI in an external macOS Terminal window. |
+| `--lora` | Launch TUI directly into LoRA Fine-Tuning mode (Mode 2). |
+| `--run-queue [DIR]`| Execute queued LoRA fine-tuning runs sequentially (default: `mlx_runs`). |
 | `--mcp` | Start Model Context Protocol (MCP) server over stdio. |
 | `--tui` | Force launch full-screen curses TUI. |
 | `--no-tui`, `--cli` | Run line-by-line CLI wizard instead of curses TUI. |
+
+---
+
+## 🦙 Apple MLX LoRA Fine-Tuning & Queue Orchestration (Mode 2)
+
+MLX Commander features a dedicated **LoRA Fine-Tuning Dashboard** alongside Dataset Conversion. Press **`[F4]`** inside the TUI or pass `--lora` from the command line to switch modes.
+
+```bash
+# Launch directly into Mode 2 (LoRA Fine-Tuning):
+mlx_commander --lora
+```
+
+### 1. Dual-Panel Fine-Tuning Setup
+- **Top Left Panel (Model & Dataset Setup)**:
+  - **Base Model Picker**: Instant select from curated 4-bit Apple MLX models (`Llama-3.2-3B`, `Llama-3.1-8B`, `Qwen2.5-7B`, `Mistral-7B`, `Phi-3.5-mini`, etc.) or input custom Hugging Face model IDs and local weights.
+  - **Dataset Directory**: Auto-synced from Mode 1 conversion output, or selected via macOS Finder (`[F2]`).
+  - **Method**: Select `lora`, `dora` (Weight-Decomposed Low-Rank Adaptation), or `full`.
+  - **Optimizer**: Pick `adamw` or `adam`.
+  - **Run Name**: Custom label or auto-generated descriptive run title.
+
+- **Top Right Panel (Explicit Hyperparameters & Hardware Estimators)**:
+  - **Explicit Hyperparameters**: All 22 MLX fine-tuning parameters made explicit with production defaults: `iters`, `batch_size`, `learning_rate`, `lora_rank`, `lora_alpha`, `lora_dropout`, `max_seq_length`, `num_layers`, `grad_checkpoint`, `mask_prompt`, `save_every`, `steps_per_eval`, and `adapter_path`.
+  - **Reactive Implied Number of Epochs**: Automatically calculated via `(iters * batch_size) / total_train_records`.
+  - **Unified Memory Estimator**: Detects your exact Apple Silicon chip and physical RAM via `sysctl hw.memsize` and computes peak memory consumption:
+    - **`[SAFE]`** (<70% RAM): Ideal headroom for macOS window server and applications.
+    - **`[TIGHT]`** (70–85% RAM): Viable, but close to memory pressure thresholds.
+    - **`[OOM RISK]`** (>85% RAM): Flags configuration risk and recommends enabling gradient checkpointing or reducing batch size/sequence length before you start training.
+  - **Duration & Clock ETA**: Estimates wall-clock training time based on hardware throughput and step count.
+
+### 2. Central Queue & Config Browser
+Queue up multiple experiments (e.g. testing 3 learning rates across 2 models) in a persistent FIFO queue:
+- **`[F6]` Add Run**: Saves current configuration to the queue (`mlx_runs/configs/<run_id>.yaml` and `mlx_runs/queue.json`).
+- **`[c]` Clone**: Duplicate the highlighted run to quickly tweak a single parameter like learning rate or rank.
+- **`[d]` Delete**: Remove a run from the queue.
+- **`[x]` Clear**: Empty the queue.
+- **`[Enter]` Load**: Load any queued run back into the editor form to inspect or modify it.
+
+### 3. Sequential Queue Execution
+> [!IMPORTANT]
+> **Sequential Execution Only**: Running multiple LLM fine-tuning runs simultaneously causes severe unified memory thrashing, swap exhaustion, and macOS `SIGKILL` kernel panics. MLX Commander strictly enforces sequential execution (FIFO).
+
+Press **`[F5 Run Queue]`**:
+- MLX Commander automatically spawns an independent macOS Terminal.app window running `mlx_commander --run-queue mlx_runs`.
+- Training stdout, iteration loss, and throughput stream live in the external window.
+- **You may safely close MLX Commander at any time** without interrupting background training.
+- You can also run the queue headless on headless servers or subshells:
+  ```bash
+  python3 -m mlx_commander --run-queue ./mlx_runs
+  ```
 
 ---
 
