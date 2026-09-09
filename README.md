@@ -1,4 +1,4 @@
-# MLX Commander 🚀
+# MLX_Commander 🚀
 
 A fast, persistent dual-panel TUI (Norton Commander style) & CLI converter for preparing Hugging Face datasets into Apple Silicon MLX fine-tuning formats (`mlx-lm`).
 
