@@ -444,7 +444,7 @@ def _draw_mode1_dashboard(
         "Dataset split:",
         (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD,
     )
-    split_label_x = min(left_w + 18, right_edge - 16)
+    split_label_x = max(left_w + 18, right_edge - 14)
     white_unbold = get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0
 
     draw_field(stdscr, splits_start_y, split_label_x, "Train", f"{state.train_pct:.0f}%", is_focused=train_focus, val_width=6, right_edge=right_edge, lbl_attr=white_unbold)

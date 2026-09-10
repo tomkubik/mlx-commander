@@ -757,6 +757,7 @@ class TestCommanderUI(unittest.TestCase):
 
         self.assertIsNotNone(train_x)
         self.assertGreater(train_x, left_w + 2, "Train label must be indented on the left side")
+        self.assertEqual(train_x, right_edge - 14, "Train label must be indented right next to input fields")
         self.assertEqual(valid_x, train_x, "Valid label must align with Train label")
         self.assertEqual(test_x, train_x, "Test label must align with Train label")
 
