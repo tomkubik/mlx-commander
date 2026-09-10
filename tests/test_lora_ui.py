@@ -289,8 +289,10 @@ class TestLoraUI(unittest.TestCase):
         self.assertNotIn("Recommendation:", all_text)
         self.assertNotIn("Headroom is optimal", all_text)
 
-        # 2. Hardware info after duration must be completely removed
+        # 2. Hardware info and old title must be completely removed
         self.assertNotIn("Hardware: Apple Silicon", all_text)
+        self.assertNotIn("Apple Silicon Unified Memory", all_text)
+        self.assertNotIn("Resource & Training Estimates", all_text)
 
         # 3. Verify specific lines and typography
         found_epochs_lbl = False
@@ -307,7 +309,7 @@ class TestLoraUI(unittest.TestCase):
                 text = args[2]
                 attr = args[3] if len(args) >= 4 else 0
 
-                if "Resource & Training Estimates" in text:
+                if "Runtime Estimates" in text:
                     found_title = True
                     # Pane title must remain bold
                     self.assertTrue(bool(attr & curses.A_BOLD), "Pane title must be bold")
@@ -331,6 +333,7 @@ class TestLoraUI(unittest.TestCase):
 
                 if "• Peak Unified RAM:" in text:
                     found_ram_main = True
+                    self.assertNotIn("~", text, "Peak Unified RAM should not contain ~")
                     # Must be green unbold (COLOR_SUCCESS)
                     self.assertEqual(attr & curses.A_BOLD, 0)
                     self.assertEqual((attr & ~curses.A_DIM & ~curses.A_BOLD) // 256, COLOR_SUCCESS)
@@ -351,6 +354,7 @@ class TestLoraUI(unittest.TestCase):
 
                 if "• Est. Duration:" in text:
                     found_duration = True
+                    self.assertNotIn("~", text, "Est. Duration should not contain ~")
                     # Must be white unbold
                     self.assertEqual(attr & curses.A_BOLD, 0)
                     self.assertEqual((attr & ~curses.A_DIM & ~curses.A_BOLD) // 256, COLOR_NORMAL_TEXT)

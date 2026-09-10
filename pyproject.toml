@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mlx_commander"
-version = "0.3.15"
+name = "mlx-commander"
+version = "0.3.16"
 description = "Convert Hugging Face datasets into Apple MLX formats, configure parameters, and run training and fine-tuning via interactive TUI and CLI"
 readme = "README.md"
 license = "MIT"

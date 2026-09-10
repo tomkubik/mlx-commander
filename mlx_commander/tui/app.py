@@ -647,9 +647,9 @@ def _draw_mode2_dashboard(
     if wb["enabled"]:
         wb_badge = f"W&B: @{wb.get('entity') or 'active'} ({wb.get('project')})"
     elif wb["available"]:
-        wb_badge = "W&B: [Not Logged In]"
+        wb_badge = "W&B: Not Logged In"
     else:
-        wb_badge = "W&B: [Offline]"
+        wb_badge = "W&B: Offline"
 
     draw_box_panel(
         stdscr,
@@ -753,14 +753,14 @@ def _draw_mode2_dashboard(
     if scroll_off + inner_h < len(fields_def):
         safe_addstr(stdscr, panel_h, max_x - 4, "▼", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
 
-    # 3. Middle Panel: Resource & Training Estimates (Implied Epochs, Peak RAM, Duration)
+    # 3. Middle Panel: Runtime Estimates (Implied Epochs, Peak RAM, Duration)
     draw_box_panel(
         stdscr,
         vis_y,
         0,
         vis_h,
         max_x,
-        "Resource & Training Estimates (Apple Silicon Unified Memory)",
+        "Runtime Estimates",
         is_focused=False,
         subtitle=wb_badge,
     )
@@ -810,7 +810,7 @@ def _draw_mode2_dashboard(
     peak_gb = mem_est.get('peak_gb', 0)
     total_ram = mem_est.get('total_ram_gb', 16)
     pct = int(round(mem_est.get('usage_ratio', 0) * 100))
-    ram_main = f"• Peak Unified RAM: ~{peak_gb} GB / {total_ram} GB ({pct}%)  [{lvl}]"
+    ram_main = f"• Peak Unified RAM: {peak_gb} GB / {total_ram} GB ({pct}%)  [{lvl}]"
     ram_desc = f"  ({desc})"
     safe_addstr(stdscr, vis_y + 2, 2, ram_main[:max_x - 4], lvl_attr)
     if len(ram_main) + 2 < max_x - 4:
@@ -822,7 +822,7 @@ def _draw_mode2_dashboard(
     m_opt = mem_est.get('optimizer_gb', mem_est.get('lora_opt_gb', 0))
     breakdown_line = f"  RAM Breakdown:    Base Model: {m_base} GB │ Activations: {m_act} GB │ LoRA Optimizer (fp32): {m_opt} GB"
     dur_est = state.get_duration_estimate()
-    dur_line = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')})"
+    dur_line = f"• Est. Duration:     {dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')})"
 
     if vis_h >= 6:
         safe_addstr(stdscr, vis_y + 3, 2, breakdown_line[:max_x - 4], gray_unbold)
