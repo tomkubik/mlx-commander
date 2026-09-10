@@ -60,8 +60,9 @@ class TestMcpServer(unittest.TestCase):
         self.assertEqual(result["splits"]["valid"], 4)
         self.assertTrue(Path(result["output_dir"]).exists())
 
+    @patch("mlx_commander.mcp_server.is_macos", return_value=True)
     @patch("mlx_commander.mcp_server.spawn_terminal_tui")
-    def test_launch_conversion_tui_tool(self, mock_spawn):
+    def test_launch_conversion_tui_tool(self, mock_spawn, mock_is_mac):
         mock_spawn.return_value = 0
         manifest_path = self.out_dir / "mlx_manifest.json"
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -77,6 +78,16 @@ class TestMcpServer(unittest.TestCase):
         mock_spawn.assert_called_once()
         self.assertEqual(res["status"], "success")
         self.assertEqual(res["total_records"], 20)
+
+    @patch("mlx_commander.mcp_server.is_macos", return_value=False)
+    def test_launch_conversion_tui_tool_non_macos(self, mock_is_mac):
+        res = launch_conversion_tui_tool(
+            dataset_path=str(self.src_file),
+            format="prompt_completion",
+            output_dir=str(self.out_dir),
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertIn("supported on macOS", res["message"])
 
     def test_run_mcp_server_missing_dep(self):
         # In environment without mcp installed, run_mcp_server exits with 1

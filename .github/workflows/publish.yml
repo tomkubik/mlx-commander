@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-and-publish:
@@ -31,7 +31,7 @@ jobs:
 
       - name: Run unit test suite
         run: |
-          python -m unittest discover tests
+          python -m unittest discover -v tests
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
