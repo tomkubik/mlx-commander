@@ -94,7 +94,7 @@ class CommanderState:
     preview_error: Optional[str] = None
 
     # Screen / Mode Navigation
-    active_tab: int = 0  # 0: Dataset Conversion, 1: LoRA Fine-Tuning
+    active_tab: int = 0  # 0: Dataset Conversion, 1: Fine-Tuning Single Run
 
     # LoRA Fine-Tuning State
     lora_config: LoraRunConfig = field(default_factory=LoraRunConfig)

@@ -1382,7 +1382,7 @@ def run_commander_tui(
         x_m1 = 2 + len(title_prefix)
 
         mode1_title = "[ 1: Dataset Converter ]"
-        mode2_title = "[ 2: LoRA Fine-Tuning (F4) ]"
+        mode2_title = "[ 2: Fine-Tuning Single Run (F4) ]"
         if state.active_tab == 0:
             m1_attr = hdr_attr | curses.A_STANDOUT | curses.A_BOLD
             m2_attr = hdr_attr | curses.A_DIM
@@ -1487,7 +1487,7 @@ def run_commander_tui(
                 state.active_tab = 1 - state.active_tab
                 if state.active_tab == 1:
                     state.sync_dataset_to_lora()
-                    state.status_message = "Switched to LoRA Fine-Tuning Mode."
+                    state.status_message = "Switched to Fine-Tuning Single Run Mode."
                 else:
                     state.status_message = "Switched to Dataset Conversion Mode."
                 state.status_is_error = False

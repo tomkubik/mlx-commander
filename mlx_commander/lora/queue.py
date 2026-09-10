@@ -57,7 +57,7 @@ class QueueManager:
             r.log_file = str(self.logs_dir / f"{r.id}.log")
 
         data = {
-            "version": "0.3.8",
+            "version": "0.3.9",
             "queue_dir": str(self.queue_dir),
             "runs": [r.to_dict() for r in self.runs],
         }

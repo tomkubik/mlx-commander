@@ -37,7 +37,10 @@ class TestLoraUI(unittest.TestCase):
         res = run_commander_tui(self.mock_win, initial_state=state)
         self.assertIsNone(res)
         self.assertEqual(state.active_tab, 1)
-        self.assertIn("LoRA", state.status_message)
+        self.assertIn("Fine-Tuning Single Run", state.status_message)
+        calls = self.mock_win.addstr.call_args_list
+        all_text = " ".join(c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str))
+        self.assertIn("2: Fine-Tuning Single Run (F4)", all_text)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
     @patch("mlx_commander.tui.app.init_colors")

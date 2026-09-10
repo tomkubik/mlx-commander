@@ -1015,7 +1015,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
     start_x = max(1, (max_x - w) // 2)
 
     shortcuts = [
-        ("F4", "Switch Mode: Dataset Converter <-> LoRA Fine-Tuning"),
+        ("F4", "Switch Mode: Dataset Converter <-> Fine-Tuning Single Run"),
         ("Tab / Shift-Tab", "Cycle focus between active screen panels"),
         ("↑ / ↓ (or k / j)", "Navigate vertically through fields, options, and queue"),
         ("← / → (or h / l)", "Navigate horizontally between columns"),
