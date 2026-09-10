@@ -6,6 +6,7 @@ Computes:
 3. Estimated Run Duration and Clock ETA
 """
 
+import math
 import os
 import re
 import subprocess
@@ -126,8 +127,15 @@ def estimate_peak_memory(config: LoraRunConfig, total_ram_bytes: Optional[int] =
     # 4. Runtime & Metal allocator overhead (GB)
     overhead_gb = 0.8
 
-    peak_gb = round(model_gb + lora_opt_gb + act_gb + overhead_gb, 1)
-    usage_ratio = peak_gb / total_ram_gb
+    peak_gb_raw = model_gb + lora_opt_gb + act_gb + overhead_gb
+    usage_ratio = peak_gb_raw / total_ram_gb
+
+    # Drop decimals and round everything up to the nearest gigabyte
+    peak_gb = math.ceil(peak_gb_raw)
+    total_ram_int = math.ceil(total_ram_gb)
+    model_gb_int = math.ceil(model_gb)
+    lora_opt_gb_int = math.ceil(lora_opt_gb)
+    act_gb_int = math.ceil(act_gb)
 
     if usage_ratio < 0.70:
         safety_tier = "safe"
@@ -148,16 +156,20 @@ def estimate_peak_memory(config: LoraRunConfig, total_ram_bytes: Optional[int] =
         if config.max_seq_length > 2048:
             recs.append("Reduce max_seq_length (e.g. 2048).")
 
-    badge = f"Est. Peak RAM: ~{peak_gb} GB / {total_ram_gb:.1f} GB [{safety_label}]"
+    badge = f"Est. Peak RAM: ~{peak_gb} GB / {total_ram_int} GB [{safety_label}]"
     return {
-        "model_gb": round(model_gb, 1),
-        "lora_opt_gb": round(lora_opt_gb, 1),
-        "act_gb": round(act_gb, 1),
-        "overhead_gb": overhead_gb,
+        "model_gb": model_gb_int,
+        "base_model_gb": model_gb_int,
+        "lora_opt_gb": lora_opt_gb_int,
+        "optimizer_gb": lora_opt_gb_int,
+        "act_gb": act_gb_int,
+        "activations_gb": act_gb_int,
+        "overhead_gb": math.ceil(overhead_gb),
         "peak_gb": peak_gb,
         "est_gb": peak_gb,
-        "total_ram_gb": round(total_ram_gb, 1),
-        "hardware_gb": round(total_ram_gb, 1),
+        "total_ram_gb": total_ram_int,
+        "total_gb": total_ram_int,
+        "hardware_gb": total_ram_int,
         "usage_ratio": round(usage_ratio, 2),
         "safety_tier": safety_tier,
         "safety_label": safety_label,

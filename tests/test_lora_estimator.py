@@ -46,6 +46,13 @@ class TestLoraEstimator(unittest.TestCase):
         self.assertIn("safety_level", res)
         self.assertEqual(res["safety_level"], "SAFE")
         self.assertIn("SAFE", res["badge"])
+        # Verify no decimals in integer GB values
+        self.assertIsInstance(res["peak_gb"], int)
+        self.assertIsInstance(res["model_gb"], int)
+        self.assertIsInstance(res["act_gb"], int)
+        self.assertIsInstance(res["lora_opt_gb"], int)
+        self.assertIsInstance(res["total_ram_gb"], int)
+        self.assertNotIn(".", res["badge"].replace("Est.", "").split("[")[0])
 
     @patch("mlx_commander.lora.estimator.get_hardware_memory_bytes", return_value=8 * 1024**3)
     def test_estimate_peak_memory_tight_and_oom(self, mock_hw):

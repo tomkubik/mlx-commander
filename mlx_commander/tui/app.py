@@ -792,20 +792,30 @@ def _draw_mode2_dashboard(
     lvl = mem_est.get("safety_level", "SAFE")
     if lvl == "SAFE":
         lvl_attr = (get_color(COLOR_SUCCESS) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        desc = "Safe fine-tuning headroom"
     elif lvl == "TIGHT":
         lvl_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        desc = "Close background applications"
     else:
         lvl_attr = (get_color(COLOR_ERROR) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
-    ram_line = f"• Peak Unified RAM: {mem_est.get('badge', '')}  [{lvl}]  ({mem_est.get('safety_desc', '')})"
+        desc = "Reduce batch size or enable grad checkpoint"
+
+    peak_gb = mem_est.get('peak_gb', 0)
+    total_ram = mem_est.get('total_ram_gb', 16)
+    pct = int(round(mem_est.get('usage_ratio', 0) * 100))
+    ram_line = f"• Peak Unified RAM: ~{peak_gb} GB / {total_ram} GB ({pct}%)  [{lvl}]  ({desc})"
     safe_addstr(stdscr, vis_y + 2, 2, ram_line[:max_x - 4], lvl_attr)
 
     # Memory Breakdown (Row 3)
-    breakdown_line = f"  RAM Breakdown:    Base Model: {mem_est.get('base_model_gb', 0):.1f} GB │ Activations: {mem_est.get('activations_gb', 0):.1f} GB │ LoRA Optimizer (fp32): {mem_est.get('optimizer_gb', 0):.1f} GB"
+    m_base = mem_est.get('base_model_gb', mem_est.get('model_gb', 0))
+    m_act = mem_est.get('activations_gb', mem_est.get('act_gb', 0))
+    m_opt = mem_est.get('optimizer_gb', mem_est.get('lora_opt_gb', 0))
+    breakdown_line = f"  RAM Breakdown:    Base Model: {m_base} GB │ Activations: {m_act} GB │ LoRA Optimizer (fp32): {m_opt} GB"
     safe_addstr(stdscr, vis_y + 3, 2, breakdown_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
     # Duration & Throughput (Row 4)
     dur_est = state.get_duration_estimate()
-    dur_line = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')}) │ Hardware: {mem_est.get('chip_name', 'Apple Silicon')} ({mem_est.get('total_gb', 16):.0f} GB Unified RAM)"
+    dur_line = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')}) │ Hardware: {mem_est.get('chip_name', 'Apple Silicon')} ({total_ram} GB Unified RAM)"
     safe_addstr(stdscr, vis_y + 4, 2, dur_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
 
     # Recommendation / Guidance (Row 5 if vis_h >= 7)
