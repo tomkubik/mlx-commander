@@ -155,7 +155,7 @@ usage: mlx_commander [-h] [-v] [-d DATASET [DATASET ...]]
 
 ## 🦙 Apple MLX LoRA Fine-Tuning & Queue Orchestration (Mode 2)
 
-MLX Commander features a dedicated **LoRA Fine-Tuning Dashboard** alongside Dataset Conversion. Press **`[F4]`** inside the TUI or pass `--lora` from the command line to switch modes.
+MLX Commander features a dedicated **LoRA Fine-Tuning Dashboard** alongside Dataset Conversion. Press **`[F2]`** inside the TUI or pass `--lora` from the command line to switch modes.
 
 ```bash
 # Launch directly into Mode 2 (LoRA Fine-Tuning):

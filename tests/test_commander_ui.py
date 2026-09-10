@@ -572,9 +572,11 @@ class TestCommanderUI(unittest.TestCase):
         full_rendered = " ".join(rendered_strings)
         self.assertIn("Help", full_rendered)
         self.assertNotIn("Open", full_rendered)
+        self.assertIn("Mode", full_rendered)
         self.assertIn("Output", full_rendered)
         self.assertIn("Convert", full_rendered)
-        self.assertIn("Scheme", full_rendered)
+        self.assertIn("Theme", full_rendered)
+        self.assertNotIn("Scheme", full_rendered)
         self.assertIn("F9", full_rendered)
         self.assertIn("Exit", full_rendered)
 
@@ -1005,10 +1007,10 @@ class TestCommanderUI(unittest.TestCase):
         ]
         row0_text = " ".join(row0_calls)
         self.assertNotIn("F1: Help", row0_text)
-        self.assertNotIn("F4: Mode", row0_text)
-        self.assertNotIn("F9: Scheme", row0_text)
+        self.assertNotIn("F2: Mode", row0_text)
+        self.assertNotIn("F9: Theme", row0_text)
         self.assertNotIn("F10: Exit", row0_text)
-        self.assertNotIn("(F4)", row0_text)
+        self.assertNotIn("(F2)", row0_text)
         self.assertIn("1: Dataset Converter", row0_text)
         self.assertIn("2: Fine-Tuning Single Run", row0_text)
 
@@ -1019,8 +1021,8 @@ class TestCommanderUI(unittest.TestCase):
         ]
         footer_text = " ".join(footer_calls)
         self.assertIn("[F1] Help", footer_text)
-        self.assertIn("[F4] Mode", footer_text)
-        self.assertIn("[F9] Scheme", footer_text)
+        self.assertIn("[F2] Mode", footer_text)
+        self.assertIn("[F9] Theme", footer_text)
         self.assertIn("[F10] Exit", footer_text)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
@@ -1039,8 +1041,8 @@ class TestCommanderUI(unittest.TestCase):
         ]
         footer_text = " ".join(footer_calls)
         self.assertIn("[F1] Help", footer_text)
-        self.assertIn("[F4] Mode", footer_text)
-        self.assertIn("[F9] Scheme", footer_text)
+        self.assertIn("[F2] Mode", footer_text)
+        self.assertIn("[F9] Theme", footer_text)
         self.assertIn("[F10] Exit", footer_text)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
@@ -1130,24 +1132,26 @@ class TestCommanderUI(unittest.TestCase):
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
     @patch("mlx_commander.tui.app.init_colors")
     @patch("mlx_commander.tui.app.curses.curs_set")
-    def test_f2_key_has_no_binding_in_mode1_and_mode2(
+    def test_f2_key_switches_mode_and_does_not_open_picker(
         self, mock_curs, mock_colors, mock_has_colors, mock_pick_folder, mock_pick_model, mock_pick_data
     ):
-        """Verify pressing F2 key does not launch any native GUI pickers in Mode 1 or Mode 2."""
-        # Mode 1
+        """Verify pressing F2 key switches between Mode 1 and Mode 2 and does not launch pickers."""
+        # Mode 1 -> switches to Mode 2
         state1 = CommanderState()
         state1.active_tab = 0
         self.mock_win.getch.side_effect = [curses.KEY_F2, ord("q")]
         run_commander_tui(self.mock_win, initial_state=state1)
+        self.assertEqual(state1.active_tab, 1)
         mock_pick_data.assert_not_called()
         mock_pick_folder.assert_not_called()
         mock_pick_model.assert_not_called()
 
-        # Mode 2
+        # Mode 2 -> switches to Mode 1
         state2 = CommanderState()
         state2.active_tab = 1
         self.mock_win.getch.side_effect = [curses.KEY_F2, ord("q")]
         run_commander_tui(self.mock_win, initial_state=state2)
+        self.assertEqual(state2.active_tab, 0)
         mock_pick_data.assert_not_called()
         mock_pick_folder.assert_not_called()
         mock_pick_model.assert_not_called()

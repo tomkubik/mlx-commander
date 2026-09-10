@@ -1349,19 +1349,19 @@ def run_commander_tui(
             if state.active_tab == 0:
                 fn_items = [
                     ("1", "Help"),
+                    ("2", "Mode"),
                     ("3", "Output"),
-                    ("4", "Mode"),
                     ("5", "Convert"),
-                    ("F9", "Scheme"),
+                    ("F9", "Theme"),
                     ("10", "Exit"),
                 ]
             else:
                 fn_items = [
                     ("1", "Help"),
-                    ("4", "Mode"),
+                    ("2", "Mode"),
                     ("5", "RunQueue"),
                     ("6", "AddRun"),
-                    ("F9", "Scheme"),
+                    ("F9", "Theme"),
                     ("10", "Exit"),
                 ]
             safe_addstr(stdscr, footer_y, 0, " " * max_x, get_color(COLOR_PANEL_BG))
@@ -1396,32 +1396,32 @@ def run_commander_tui(
 
             if state.active_tab == 0:
                 if max_x >= 120:
-                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [F1] Help  [F3] Output  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [F1] Help  [F2] Mode  [F3] Output  [F5] Convert  [F9] Theme  [F10] Exit"
                 elif max_x >= 100:
-                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F3] Output  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F2] Mode  [F3] Output  [F5] Convert  [F9] Theme  [F10] Exit"
                 elif max_x >= 80:
-                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F2] Mode  [F5] Convert  [F9] Theme  [F10] Exit"
                 elif max_x >= 65:
-                    bar_shortcuts = "[F1] Help  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[F1] Help  [F2] Mode  [F5] Convert  [F9] Theme  [F10] Exit"
                 elif max_x >= 57:
-                    bar_shortcuts = "[F1] Help [F4] Mode [F5] Convert [F9] Scheme [F10] Exit"
+                    bar_shortcuts = "[F1] Help [F2] Mode [F5] Convert [F9] Theme [F10] Exit"
                 else:
-                    bar_shortcuts = "F1:Help F4:Mode F9:Scheme F10:Exit"
+                    bar_shortcuts = "F1:Help F2:Mode F9:Theme F10:Exit"
             else:
                 if max_x >= 120:
-                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [c] Clone  [d] Del  [F1] Help  [F4] Mode  [F5] Run  [F6] Add  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [c] Clone  [d] Del  [F1] Help  [F2] Mode  [F5] Run  [F6] Add  [F9] Theme  [F10] Exit"
                 elif max_x >= 102:
-                    bar_shortcuts = "[Tab] Switch  [c] Clone  [F1] Help  [F4] Mode  [F5] Run  [F6] Add  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [c] Clone  [F1] Help  [F2] Mode  [F5] Run  [F6] Add  [F9] Theme  [F10] Exit"
                 elif max_x >= 85:
-                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F4] Mode  [F5] Run  [F6] Add  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F2] Mode  [F5] Run  [F6] Add  [F9] Theme  [F10] Exit"
                 elif max_x >= 76:
-                    bar_shortcuts = "[Tab] Switch [F1] Help [F4] Mode [F5] Run [F6] Add [F9] Scheme [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch [F1] Help [F2] Mode [F5] Run [F6] Add [F9] Theme [F10] Exit"
                 elif max_x >= 60:
-                    bar_shortcuts = "[F1] Help  [F4] Mode  [F5] Run  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[F1] Help  [F2] Mode  [F5] Run  [F9] Theme  [F10] Exit"
                 elif max_x >= 53:
-                    bar_shortcuts = "[F1] Help [F4] Mode [F5] Run [F9] Scheme [F10] Exit"
+                    bar_shortcuts = "[F1] Help [F2] Mode [F5] Run [F9] Theme [F10] Exit"
                 else:
-                    bar_shortcuts = "F1:Help F4:Mode F9:Scheme F10:Exit"
+                    bar_shortcuts = "F1:Help F2:Mode F9:Theme F10:Exit"
 
             shortcuts_len = len(bar_shortcuts)
             shortcuts_x = max(1, max_x - shortcuts_len - 1)
@@ -1452,7 +1452,7 @@ def run_commander_tui(
             if key in (ord("?"), curses.KEY_F1):
                 show_help_dialog(stdscr)
 
-            elif key in (curses.KEY_F4, 20):  # F4 or Ctrl+T (Mode switcher)
+            elif key in (curses.KEY_F2, 20):  # F2 or Ctrl+T (Mode switcher)
                 state.active_tab = 1 - state.active_tab
                 if state.active_tab == 1:
                     state.sync_dataset_to_lora()

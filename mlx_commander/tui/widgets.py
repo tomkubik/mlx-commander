@@ -1023,7 +1023,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
     start_x = max(1, (max_x - w) // 2)
 
     shortcuts = [
-        ("F4", "Switch Mode: Dataset Converter <-> Fine-Tuning Single Run"),
+        ("F2", "Switch Mode: Dataset Converter <-> Fine-Tuning Single Run"),
         ("Tab / Shift-Tab", "Cycle focus between active screen panels"),
         ("↑ / ↓ (or k / j)", "Navigate vertically through fields, options, and queue"),
         ("← / → (or h / l)", "Navigate horizontally between columns"),
@@ -1034,7 +1034,7 @@ def show_help_dialog(stdscr: curses.window) -> None:
         ("c", "Clone selected LoRA run in Queue (Mode 2)"),
         ("d", "Delete selected LoRA run from Queue (Mode 2)"),
         ("x", "Clear LoRA Queue (Mode 2)"),
-        ("F9", "Toggle color scheme (Norton Commander <-> Modern)"),
+        ("F9", "Toggle theme (Norton Commander <-> Modern)"),
         ("r / R", "Randomize split seed"),
         ("? / F1", "Show this help screen"),
         ("F10 / q / Esc", "Exit MLX Commander"),

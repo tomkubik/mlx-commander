@@ -25,13 +25,13 @@ class TestLoraUI(unittest.TestCase):
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
     @patch("mlx_commander.tui.app.init_colors")
     @patch("mlx_commander.tui.app.curses.curs_set")
-    def test_switch_to_lora_mode_f4(self, mock_curs, mock_colors, mock_has_colors):
+    def test_mode_switch_f2(self, mock_curs, mock_colors, mock_has_colors):
         state = CommanderState()
         state.queue_manager = QueueManager(self.queue_dir)
 
-        # Start in mode 0, press F4 (switches to mode 1), then 'q' to quit
+        # Start in mode 0, press F2 (switches to mode 1), then 'q' to quit
         self.mock_win.getch.side_effect = [
-            curses.KEY_F4,
+            curses.KEY_F2,
             ord("q"),
         ]
         res = run_commander_tui(self.mock_win, initial_state=state)
@@ -41,8 +41,8 @@ class TestLoraUI(unittest.TestCase):
         calls = self.mock_win.addstr.call_args_list
         all_text = " ".join(c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str))
         self.assertIn("2: Fine-Tuning Single Run", all_text)
-        self.assertNotIn("2: Fine-Tuning Single Run (F4)", all_text)
-        self.assertIn("[F4] Mode", all_text)
+        self.assertNotIn("2: Fine-Tuning Single Run (F2)", all_text)
+        self.assertIn("[F2] Mode", all_text)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
     @patch("mlx_commander.tui.app.init_colors")
