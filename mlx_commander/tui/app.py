@@ -9,7 +9,7 @@ Layout:
 ┌─ Live Converted Record Preview (Updates instantaneously as you edit fields) ──────────┐
 │ {"prompt": "...", "completion": "..."}                                                │
 └───────────────────────────────────────────────────────────────────────────────────────┘
- [Tab] Switch Pane   [↑/↓] Navigate   [Enter] Edit/Select   [F2] Finder   [F5] Convert   [F10] Exit
+ [Tab] Switch Pane   [↑/↓] Navigate   [Enter] Edit/Select   [F5] Convert   [F10] Exit
 """
 
 import curses
@@ -69,6 +69,7 @@ from mlx_commander.tui.widgets import (
     show_choice_dialog,
     show_column_picker_dialog,
     show_dataset_picker_dialog,
+    show_dataset_source_dialog,
     show_error_dialog,
     show_help_dialog,
     show_message_dialog,
@@ -316,40 +317,34 @@ def _draw_mode1_dashboard(
         subtitle="Tab 1",
     )
 
-    disp_path = state.dataset_path or "<no path set>"
+    d_focus = is_left and state.left_focus_idx == 0
+    data_disp = state.dataset_path or "None"
     tab1_right_edge = left_w - 3
-    max_path_w = max(10, left_w - 12)
-    if len(disp_path) > max_path_w:
-        disp_path = "…" + disp_path[-(max_path_w - 1):]
-    path_x = max(8, tab1_right_edge - len(disp_path) + 1)
-    safe_addstr(stdscr, 2, 2, "Path: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-    safe_addstr(stdscr, 2, path_x, disp_path, get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else curses.A_DIM)
+    if len(data_disp) > left_w - 18:
+        data_disp = "…" + data_disp[-(left_w - 19):]
+    draw_field(stdscr, 2, 2, "Dataset", data_disp, is_focused=d_focus, val_width=max(14, left_w - 18), has_dropdown=True, right_edge=tab1_right_edge)
 
-    f2_focus = is_left and state.left_focus_idx == 0
-    edit_focus = is_left and state.left_focus_idx == 1
-    draw_button(stdscr, 3, 2, "Finder (F2)", is_focused=f2_focus)
-    draw_button(stdscr, 4, 2, "Change Path", is_focused=edit_focus)
-    safe_addstr(stdscr, 5, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
+    safe_addstr(stdscr, 3, 2, "Tip: You can load multiple files (select multiple or use commas)"[:left_w - 4], get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
 
     if state.loaded_dataset:
         ds = state.loaded_dataset
-        safe_addstr(stdscr, 6, 2, "Rows: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        safe_addstr(stdscr, 6, 8, f"{ds.total_rows:,}  ", get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0)
+        safe_addstr(stdscr, 5, 2, "Rows: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 5, 8, f"{ds.total_rows:,}  ", get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0)
         splits_x = 8 + len(f"{ds.total_rows:,}  ")
-        safe_addstr(stdscr, 6, splits_x, "Splits: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        safe_addstr(stdscr, 6, splits_x + 8, f"{len(ds.split_names)}", get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0)
+        safe_addstr(stdscr, 5, splits_x, "Splits: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 5, splits_x + 8, f"{len(ds.split_names)}", get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0)
         split_summary = ", ".join(f"{s}: {ds.split_counts.get(s, 0):,}" for s in ds.split_names[:3])
-        safe_addstr(stdscr, 7, 2, f"Found: [{split_summary}]", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, 6, 2, f"Found: [{split_summary}]", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
         cols = ds.columns
     else:
-        safe_addstr(stdscr, 6, 2, "No dataset loaded.", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        safe_addstr(stdscr, 7, 2, "Use Finder (F2) or Change Path.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, 5, 2, "No dataset loaded.", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, 6, 2, "Press Enter on Dataset to browse or enter path.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
         cols = []
 
-    safe_addstr(stdscr, 8, 2, f"Columns ({len(cols)}):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-    col_list_focus = is_left and state.left_focus_idx == 2
-    col_list_start_y = 9
-    col_list_rows = max(1, panel_h - 11)
+    safe_addstr(stdscr, 7, 2, f"Columns ({len(cols)}):", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+    col_list_focus = is_left and state.left_focus_idx == 1
+    col_list_start_y = 8
+    col_list_rows = max(1, panel_h - 10)
 
     if cols:
         if state.selected_column_idx < state.column_scroll_offset:
@@ -505,7 +500,7 @@ def _draw_mode1_dashboard(
 
     if not state.loaded_dataset:
         safe_addstr(stdscr, preview_y + 1, 3, "(No dataset selected)", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-        safe_addstr(stdscr, preview_y + 2, 3, "Use Finder (F2) or Change Path in Tab 1 to select a dataset.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, preview_y + 2, 3, "Select a dataset in Tab 1 to preview records.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
     elif state.preview_error:
         safe_addstr(stdscr, preview_y + 1, 3, f"[!] {state.preview_error}", get_color(5) | curses.A_BOLD)
         safe_addstr(stdscr, preview_y + 2, 3, "Adjust column mappings in the Right Panel (Tab 2) to preview records.", get_color(COLOR_LABEL_GRAY) if curses.has_colors() else curses.A_DIM)
@@ -655,7 +650,7 @@ def _draw_mode2_dashboard(
         safe_addstr(stdscr, 11, 2, div_line[:left_w - 4], (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
         tips = [
-            ("F2", "Browse Finder for Model/Data"),
+            ("Enter", "Browse Finder or Edit Path"),
             ("F6", "Add Config to Queue"),
             ("F5", "Run Queue Sequentially"),
             ("Tab", "Switch Panels (Left/Right/Queue)"),
@@ -897,22 +892,7 @@ def _handle_mode1_input(
     is_left = (state.active_panel == ActivePanel.LEFT)
     is_right = (state.active_panel == ActivePanel.RIGHT)
 
-    if key in (curses.KEY_F2, 15):  # F2 or Ctrl+O
-        curses.def_prog_mode()
-        curses.endwin()
-        from mlx_commander.gui_picker import pick_dataset_gui
-        chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
-        curses.reset_prog_mode()
-        stdscr.refresh()
-        if chosen:
-            if not state.load_dataset(chosen):
-                if state.last_missing_dependency:
-                    if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
-                        state.load_dataset(chosen)
-                else:
-                    show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
-
-    elif key in (curses.KEY_F3,):  # F3: Destination Folder
+    if key in (curses.KEY_F3,):  # F3: Destination Folder
         curses.def_prog_mode()
         curses.endwin()
         from mlx_commander.gui_picker import is_macos, pick_folder_gui
@@ -953,10 +933,8 @@ def _handle_mode1_input(
     elif is_left:
         num_cols = len(state.loaded_dataset.columns) if (state.loaded_dataset and state.loaded_dataset.columns) else 0
         if key in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
-            if state.left_focus_idx == 2 and state.selected_column_idx > 0:
+            if state.left_focus_idx == 1 and state.selected_column_idx > 0:
                 state.selected_column_idx -= 1
-            elif state.left_focus_idx == 2:
-                state.left_focus_idx = 1
             elif state.left_focus_idx == 1:
                 state.left_focus_idx = 0
             elif state.left_focus_idx == 0:
@@ -964,47 +942,26 @@ def _handle_mode1_input(
                 state.right_focus_idx = total_right_fields - 1
         elif key in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
             if state.left_focus_idx == 0:
-                state.left_focus_idx = 1
-            elif state.left_focus_idx == 1:
                 if num_cols > 0:
-                    state.left_focus_idx = 2
+                    state.left_focus_idx = 1
                     state.selected_column_idx = 0
                 else:
                     state.active_panel = ActivePanel.RIGHT
                     state.right_focus_idx = 0
-            elif state.left_focus_idx == 2:
+            elif state.left_focus_idx == 1:
                 if state.selected_column_idx < num_cols - 1:
                     state.selected_column_idx += 1
                 else:
                     state.active_panel = ActivePanel.RIGHT
                     state.right_focus_idx = 0
         elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
-            if state.left_focus_idx == 0:  # Finder button
-                curses.def_prog_mode()
-                curses.endwin()
-                from mlx_commander.gui_picker import pick_dataset_gui
-                chosen = pick_dataset_gui(default_dir=state.dataset_path or os.getcwd())
-                curses.reset_prog_mode()
-                stdscr.refresh()
+            if state.left_focus_idx == 0:  # Dataset field
+                chosen = show_dataset_source_dialog(stdscr, state.dataset_path)
                 if chosen:
                     if not state.load_dataset(chosen):
                         if state.last_missing_dependency:
                             if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
                                 state.load_dataset(chosen)
-                        else:
-                            show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
-            elif state.left_focus_idx == 1:  # Edit path
-                new_path = show_text_edit_dialog(
-                    stdscr,
-                    "Change Dataset Path",
-                    "Enter path(s) to local HF dataset (comma/newline separated for multiple):",
-                    default_val=state.dataset_path or os.getcwd(),
-                )
-                if new_path:
-                    if not state.load_dataset(new_path):
-                        if state.last_missing_dependency:
-                            if show_missing_dependency_dialog(stdscr, state.last_missing_dependency):
-                                state.load_dataset(new_path)
                         else:
                             show_error_dialog(stdscr, "Dataset Loading Failed", state.status_message)
 
@@ -1017,10 +974,10 @@ def _handle_mode1_input(
             else:
                 state.active_panel = ActivePanel.LEFT
                 if num_cols > 0:
-                    state.left_focus_idx = 2
+                    state.left_focus_idx = 1
                     state.selected_column_idx = num_cols - 1
                 else:
-                    state.left_focus_idx = 1
+                    state.left_focus_idx = 0
         elif key in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
             if state.right_focus_idx < total_right_fields - 1:
                 state.right_focus_idx += 1
@@ -1107,30 +1064,6 @@ def _handle_mode2_input(
             state.lora_active_panel = "right"
         else:
             state.lora_active_panel = "left"
-
-    elif key in (curses.KEY_F2, 15):  # F2 or Ctrl+O (Finder)
-        curses.def_prog_mode()
-        curses.endwin()
-        if state.lora_active_panel == "left" and state.lora_left_focus_idx == 0:
-            from mlx_commander.gui_picker import pick_model_gui
-            chosen = pick_model_gui("Select Local Base Model (Folder or File)", default_dir=state.lora_config.model or os.getcwd())
-            curses.reset_prog_mode()
-            stdscr.refresh()
-            if chosen:
-                state.lora_config.model = chosen.strip()
-                state.inspect_current_model()
-                state.update_deterministic_lora_name()
-                state.status_message = f"Base model set to: {state.lora_config.model}"
-                state.status_is_error = False
-        else:
-            from mlx_commander.gui_picker import pick_folder_gui
-            chosen = pick_folder_gui("Select Dataset Folder", default_dir=state.lora_config.data or os.getcwd())
-            curses.reset_prog_mode()
-            stdscr.refresh()
-            if chosen:
-                state.lora_config.data = chosen.strip()
-                state.status_message = f"Dataset folder set to: {chosen}"
-                state.status_is_error = False
 
     # Navigation in Left Panel (Setup)
     elif state.lora_active_panel == "left":
@@ -1416,7 +1349,6 @@ def run_commander_tui(
             if state.active_tab == 0:
                 fn_items = [
                     ("1", "Help"),
-                    ("2", "Open"),
                     ("3", "Output"),
                     ("4", "Mode"),
                     ("5", "Convert"),
@@ -1464,9 +1396,9 @@ def run_commander_tui(
 
             if state.active_tab == 0:
                 if max_x >= 120:
-                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [F1] Help  [F2] Open  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [F1] Help  [F3] Output  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
                 elif max_x >= 100:
-                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F2] Open  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F3] Output  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
                 elif max_x >= 80:
                     bar_shortcuts = "[Tab] Switch  [F1] Help  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
                 elif max_x >= 65:

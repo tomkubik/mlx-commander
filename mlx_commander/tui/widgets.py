@@ -169,7 +169,7 @@ def run_text_input(
 ) -> Optional[str]:
     """
     Display a text input screen with cursor editing, auto-completion, and default value.
-    Supports triggering a native GUI file/folder picker via [Ctrl+O] or [F2].
+    Supports triggering a native GUI file/folder picker via [Ctrl+O].
     """
     from mlx_commander.gui_picker import pick_dataset_gui, pick_folder_gui
 
@@ -216,7 +216,7 @@ def run_text_input(
 
         footer_text = "[Enter] Confirm  |  [Tab] Auto-complete  |  [Esc] Cancel"
         if gui_picker_type:
-            footer_text = "[Enter] Confirm  |  [Ctrl+O / F2] Open Finder GUI  |  [Tab] Complete  |  [Esc] Cancel"
+            footer_text = "[Enter] Confirm  |  [Ctrl+O] Open Finder GUI  |  [Tab] Complete  |  [Esc] Cancel"
         draw_footer(stdscr, footer_text)
 
         # Position cursor
@@ -229,7 +229,7 @@ def run_text_input(
             return "".join(text)
         elif key == 27:  # ESC
             return None
-        elif gui_picker_type and key in (15, 6, curses.KEY_F2):  # Ctrl+O, Ctrl+F, or F2
+        elif gui_picker_type and key in (15, 6):  # Ctrl+O or Ctrl+F
             curses.def_prog_mode()
             curses.endwin()
             curr_path = "".join(text).strip() or os.getcwd()
@@ -1028,7 +1028,6 @@ def show_help_dialog(stdscr: curses.window) -> None:
         ("↑ / ↓ (or k / j)", "Navigate vertically through fields, options, and queue"),
         ("← / → (or h / l)", "Navigate horizontally between columns"),
         ("Enter / Space", "Edit field, toggle value, or load queued run"),
-        ("F2", "Open macOS Finder (Dataset file or directory picker)"),
         ("F3", "Open macOS Finder to choose output destination folder"),
         ("F5", "Run conversion (Mode 1) or Execute Queue (Mode 2)"),
         ("F6", "Add current configuration to LoRA Queue (Mode 2)"),
@@ -1592,7 +1591,7 @@ def show_model_picker_dialog(
 
     configure_escdelay(25)
     options: List[Tuple[str, str]] = [
-        ("[ 📁 Browse Drive with Finder (F2)... ]", "Select model folder or config.json via Finder"),
+        ("[ 📁 Browse Drive with Finder... ]", "Select model folder or config.json via Finder"),
         ("[ ✍ Enter Local Model Path Manually... ]", "Enter path to model directory or weights"),
     ]
 
@@ -1697,7 +1696,7 @@ def show_dataset_picker_dialog(
 
     configure_escdelay(25)
     options: List[Tuple[str, str]] = [
-        ("[ 📁 Browse Drive with Finder (F2)... ]", "Select dataset folder containing train.jsonl via Finder"),
+        ("[ 📁 Browse Drive with Finder... ]", "Select dataset folder containing train.jsonl via Finder"),
         ("[ ✍ Enter Local Dataset Path Manually... ]", "Enter path to directory with train.jsonl / valid.jsonl"),
     ]
 
@@ -1793,6 +1792,126 @@ def show_dataset_picker_dialog(
                     "Dataset Path",
                     "Enter directory containing train.jsonl / valid.jsonl:",
                     default_val=current_dataset,
+                )
+                if val and val.strip():
+                    return val.strip()
+                return None
+            else:
+                disc_idx = sel_idx - 2
+                if 0 <= disc_idx < len(candidates):
+                    return str(candidates[disc_idx])
+                return options[sel_idx][0]
+
+
+def show_dataset_source_dialog(
+    stdscr: curses.window,
+    current_dataset: str = "",
+) -> Optional[str]:
+    """
+    Modal dialog to select a dataset source for conversion (Mode 1).
+    Allows browsing via native macOS Finder, entering a local path or Hugging Face ID manually,
+    or selecting a discovered local dataset file/directory.
+    """
+    from mlx_commander.gui_picker import pick_dataset_gui
+
+    configure_escdelay(25)
+    options: List[Tuple[str, str]] = [
+        ("[ 📁 Browse Drive with Finder... ]", "Select dataset file(s) or folder via Finder"),
+        ("[ ✍ Enter Dataset Path or HF ID Manually... ]", "Enter local path(s) or Hugging Face repo ID"),
+    ]
+
+    # Discover candidate local datasets in cwd
+    candidates: List[Path] = []
+    cwd = Path.cwd()
+    data_exts = {".parquet", ".jsonl", ".arrow", ".csv", ".tsv", ".json", ".sqlite", ".tar"}
+    try:
+        for p in sorted(cwd.iterdir()):
+            if p.name.startswith("."):
+                continue
+            if p.is_file() and p.suffix.lower() in data_exts:
+                candidates.append(p)
+            elif p.is_dir() and p.name in ("mlx_dataset", "data", "dataset", "datasets"):
+                candidates.append(p)
+    except Exception:
+        pass
+
+    for c in candidates[:8]:
+        if c.is_file():
+            sz_mb = c.stat().st_size / (1024 * 1024)
+            options.append((f"• {c.name}", f"Local file ({sz_mb:.1f} MB) - {c}"))
+        else:
+            options.append((f"• {c.name}/", f"Local directory - {c}"))
+
+    sel_idx = 0
+    if current_dataset:
+        for i, (d_id, d_desc) in enumerate(options):
+            if current_dataset in d_id or current_dataset in d_desc or d_id.endswith(current_dataset):
+                sel_idx = i
+                break
+
+    max_y, max_x = stdscr.getmaxyx()
+    h = min(len(options) + 6, max_y - 4, 16)
+    w = min(max_x - 4, 76)
+    start_y = max(1, (max_y - h) // 2)
+    start_x = max(1, (max_x - w) // 2)
+
+    safe_curs_set(0)
+
+    while True:
+        safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " Select Dataset Source ", (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(COLOR_BORDER_JOINTS) if safe_has_colors() else 0)
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+
+        visible_rows = h - 4
+        scroll_offset = max(0, sel_idx - visible_rows // 2)
+        if sel_idx < scroll_offset:
+            scroll_offset = sel_idx
+        elif sel_idx >= scroll_offset + visible_rows:
+            scroll_offset = sel_idx - visible_rows + 1
+
+        for r in range(visible_rows):
+            opt_idx = scroll_offset + r
+            row_y = start_y + 1 + r
+            if opt_idx < len(options):
+                d_id, desc = options[opt_idx]
+                is_focused = (opt_idx == sel_idx)
+                prefix = " ▶ " if is_focused else "   "
+                short_d = d_id if len(d_id) <= 42 else d_id[:39] + "…"
+                line_str = f"{prefix}{short_d:<42} {desc}"[: w - 4]
+                if is_focused:
+                    attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+                else:
+                    attr = get_color(COLOR_BORDER_JOINTS) if safe_has_colors() else 0
+                safe_addstr(stdscr, row_y, start_x + 1, line_str, attr)
+
+        safe_addstr(stdscr, start_y + h - 2, start_x + 3, "[Enter/Space] Select   [Esc] Cancel", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        stdscr.refresh()
+
+        k = stdscr.getch()
+        if k in (curses.KEY_UP, curses.KEY_LEFT, ord("k"), ord("h")):
+            sel_idx = max(0, sel_idx - 1)
+        elif k in (curses.KEY_DOWN, curses.KEY_RIGHT, ord("j"), ord("l")):
+            sel_idx = min(len(options) - 1, sel_idx + 1)
+        elif k in (27, ord("q"), ord("Q")):
+            return None
+        elif k in (10, 13, 32):  # Enter or Space
+            if sel_idx == 0:  # Browse Drive with Finder
+                curses.def_prog_mode()
+                curses.endwin()
+                chosen = pick_dataset_gui(prompt="Select Dataset (File, Files, or Folder)", default_dir=current_dataset or os.getcwd())
+                curses.reset_prog_mode()
+                stdscr.refresh()
+                if chosen and chosen.strip():
+                    return chosen.strip()
+                continue
+            elif sel_idx == 1:  # Enter Dataset Path or HF ID Manually
+                val = show_text_edit_dialog(
+                    stdscr,
+                    "Dataset Path or HF ID",
+                    "Enter local dataset path(s) or Hugging Face repo ID:",
+                    default_val=current_dataset or os.getcwd(),
                 )
                 if val and val.strip():
                     return val.strip()

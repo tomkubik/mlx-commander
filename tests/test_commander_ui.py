@@ -399,23 +399,34 @@ class TestCommanderUI(unittest.TestCase):
     @patch("mlx_commander.tui.app.init_colors")
     @patch("mlx_commander.tui.app.curses.curs_set")
     def test_vertical_navigation_left_panel_arrows(self, mock_curs, mock_colors, mock_has_colors):
-        # Left panel starts at left_focus_idx = 0.
-        # Right arrow acts as Down (switches DOWN -> index 1)
-        # Right arrow acts as Down again (switches DOWN -> index 2)
-        # Left arrow acts as Up (switches UP -> index 1)
-        # Left arrow acts as Up (switches UP -> index 0)
+        # Left panel starts at left_focus_idx = 0 (Dataset field).
+        # With columns loaded, Down moves to column list (left_focus_idx = 1, selected_column_idx = 0)
+        # Down again moves to next column (selected_column_idx = 1)
+        # Up moves back to first column (selected_column_idx = 0)
+        # Up again moves back to Dataset field (left_focus_idx = 0)
+        from mlx_commander.loader import LoadedDataset
         state = CommanderState()
+        state.loaded_dataset = LoadedDataset(
+            source_path="mock.jsonl",
+            is_split=False,
+            split_names=["train"],
+            split_counts={"train": 10},
+            columns=["col_a", "col_b", "col_c"],
+            total_rows=10,
+            sample_records=[{"col_a": "1", "col_b": "2", "col_c": "3"}],
+        )
         state.active_panel = ActivePanel.LEFT
         state.left_focus_idx = 0
 
         self.mock_win.getch.side_effect = [
-            curses.KEY_RIGHT,  # moves to index 1
-            curses.KEY_RIGHT,  # moves to index 2
-            curses.KEY_LEFT,   # moves back to index 1
+            curses.KEY_RIGHT,  # moves to column list (index 1, col 0)
+            curses.KEY_RIGHT,  # moves to col 1
+            curses.KEY_LEFT,   # moves back to col 0
             ord("q"),          # quit
         ]
         run_commander_tui(self.mock_win, initial_state=state)
         self.assertEqual(state.left_focus_idx, 1)
+        self.assertEqual(state.selected_column_idx, 0)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
     @patch("mlx_commander.tui.app.init_colors")
@@ -560,7 +571,7 @@ class TestCommanderUI(unittest.TestCase):
         ]
         full_rendered = " ".join(rendered_strings)
         self.assertIn("Help", full_rendered)
-        self.assertIn("Open", full_rendered)
+        self.assertNotIn("Open", full_rendered)
         self.assertIn("Output", full_rendered)
         self.assertIn("Convert", full_rendered)
         self.assertIn("Scheme", full_rendered)
@@ -574,10 +585,10 @@ class TestCommanderUI(unittest.TestCase):
         from mlx_commander.tui.state import ActivePanel
         state = CommanderState()
         state.active_panel = ActivePanel.LEFT
-        state.left_focus_idx = 1  # Change Path button (no dataset loaded)
+        state.left_focus_idx = 0  # Unified Dataset field (no dataset loaded)
 
         # Press Down -> should transition to Tab 2 (right_focus_idx = 0)
-        # Press Up -> should transition back to Tab 1 (left_focus_idx = 1)
+        # Press Up -> should transition back to Tab 1 (left_focus_idx = 0)
         # Press q -> quit
         self.mock_win.getch.side_effect = [
             curses.KEY_DOWN,
@@ -586,7 +597,7 @@ class TestCommanderUI(unittest.TestCase):
         ]
         run_commander_tui(self.mock_win, initial_state=state)
         self.assertEqual(state.active_panel, ActivePanel.LEFT)
-        self.assertEqual(state.left_focus_idx, 1)
+        self.assertEqual(state.left_focus_idx, 0)
 
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
@@ -827,21 +838,21 @@ class TestCommanderUI(unittest.TestCase):
 
         run_commander_tui(self.mock_win, initial_state=state)
 
-        # 1. Verify Tab 1 Path label is at left (2) and path text ends at tab1_right_edge (57)
-        path_lbl_found = False
-        path_val_end = None
+        # 1. Verify Tab 1 Dataset label is at left (2) and field ends at tab1_right_edge (57)
+        ds_lbl_found = False
+        ds_val_end = None
         for call_args in self.mock_win.addstr.call_args_list:
             args = call_args[0]
             if len(args) >= 3 and isinstance(args[2], str):
                 y, x, text = args[0], args[1], args[2]
-                if y == 2 and "Path:" in text:
-                    self.assertEqual(x, 2, "Tab 1 Path label must be aligned to left (x=2)")
-                    path_lbl_found = True
+                if y == 2 and "Dataset:" in text:
+                    self.assertEqual(x, 2, "Tab 1 Dataset label must be aligned to left (x=2)")
+                    ds_lbl_found = True
                 elif y == 2 and 8 <= x < left_w and not text.startswith("┌") and not text.startswith("│"):
-                    path_val_end = x + len(text) - 1
+                    ds_val_end = x + len(text) - 1
 
-        self.assertTrue(path_lbl_found)
-        self.assertEqual(path_val_end, tab1_right_edge, f"Path display in Tab 1 should end at {tab1_right_edge}")
+        self.assertTrue(ds_lbl_found)
+        self.assertEqual(ds_val_end, tab1_right_edge, f"Dataset display in Tab 1 should end at {tab1_right_edge}")
 
         # 2. Verify Tab 2 mapping labels start at left_w + 2 and boxes end at tab2_right_edge
         mapping_fields = state.get_mapping_fields_for_format()
@@ -1074,6 +1085,72 @@ class TestCommanderUI(unittest.TestCase):
         self.assertNotIn("Convert Dataset", full_screen)
         # Verify footer row does not contain Convert
         self.assertNotIn("Convert", "".join(grid_during_dialog[max_y - 1]))
+
+    @patch("mlx_commander.tui.app.show_dataset_source_dialog", return_value="/mock/path/data.jsonl")
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_mode1_dataset_selector_opens_dialog_and_loads_data(self, mock_curs, mock_colors, mock_has_colors, mock_src_dialog):
+        """Verify pressing Enter on Mode 1 Dataset field (index 0) invokes show_dataset_source_dialog."""
+        state = CommanderState()
+        state.active_tab = 0
+        from mlx_commander.tui.state import ActivePanel
+        state.active_panel = ActivePanel.LEFT
+        state.left_focus_idx = 0
+
+        with patch.object(state, "load_dataset", return_value=True) as mock_load:
+            self.mock_win.getch.side_effect = [
+                10,       # Enter on Dataset field
+                ord("q")  # Exit
+            ]
+            run_commander_tui(self.mock_win, initial_state=state)
+            mock_src_dialog.assert_called_once()
+            mock_load.assert_called_once_with("/mock/path/data.jsonl")
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_mode1_dashboard_rendering_no_f2_or_buttons(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify Mode 1 dashboard renders unified Dataset field without Finder (F2) or Change Path buttons."""
+        state = CommanderState()
+        state.active_tab = 0
+        self.mock_win.getch.side_effect = [ord("q")]
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        calls = self.mock_win.addstr.call_args_list
+        all_text = " ".join(c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str))
+        self.assertIn("Dataset", all_text)
+        self.assertNotIn("Finder (F2)", all_text)
+        self.assertNotIn("Change Path", all_text)
+        self.assertNotIn("[F2] Open", all_text)
+
+    @patch("mlx_commander.gui_picker.pick_dataset_gui")
+    @patch("mlx_commander.gui_picker.pick_model_gui")
+    @patch("mlx_commander.gui_picker.pick_folder_gui")
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_f2_key_has_no_binding_in_mode1_and_mode2(
+        self, mock_curs, mock_colors, mock_has_colors, mock_pick_folder, mock_pick_model, mock_pick_data
+    ):
+        """Verify pressing F2 key does not launch any native GUI pickers in Mode 1 or Mode 2."""
+        # Mode 1
+        state1 = CommanderState()
+        state1.active_tab = 0
+        self.mock_win.getch.side_effect = [curses.KEY_F2, ord("q")]
+        run_commander_tui(self.mock_win, initial_state=state1)
+        mock_pick_data.assert_not_called()
+        mock_pick_folder.assert_not_called()
+        mock_pick_model.assert_not_called()
+
+        # Mode 2
+        state2 = CommanderState()
+        state2.active_tab = 1
+        self.mock_win.getch.side_effect = [curses.KEY_F2, ord("q")]
+        run_commander_tui(self.mock_win, initial_state=state2)
+        mock_pick_data.assert_not_called()
+        mock_pick_folder.assert_not_called()
+        mock_pick_model.assert_not_called()
 
 
 if __name__ == "__main__":

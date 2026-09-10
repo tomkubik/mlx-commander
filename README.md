@@ -12,7 +12,7 @@ Built entirely with Python's standard library `curses` with zero mandatory depen
 
 ## 🌟 Key Features
 
-- **Persistent Multi-Panel TUI (Norton Commander style)**: Full keyboard navigation (`Tab` to switch panels, `↑`/`↓` to navigate, `Enter` to edit/open dropdowns, `F2` for Finder, `F5` to convert).
+- **Persistent Multi-Panel TUI (Norton Commander style)**: Full keyboard navigation (`Tab` to switch panels, `↑`/`↓` to navigate, `Enter` to edit/open dropdowns, `F5` to convert).
 - **AI Agent Skill & TUI Pre-Population**: Coding agents (Antigravity, Claude, Cursor) can inspect dataset schemas, pre-populate format, column mappings, and splits, and launch the TUI for split-second visual confirmation.
 - **macOS Terminal.app Spawner**: Seamless handoff from non-interactive agent environments to an interactive TUI window via AppleScript.
 - **Model Context Protocol (MCP) Server**: Native stdio MCP server exposing dataset inspection, TUI launching, and headless conversions to Claude Desktop and Cursor.
@@ -165,7 +165,7 @@ mlx_commander --lora
 ### 1. Dual-Panel Fine-Tuning Setup
 - **Top Left Panel (Model & Dataset Setup)**:
   - **Base Model Picker**: Instant select from curated 4-bit Apple MLX models (`Llama-3.2-3B`, `Llama-3.1-8B`, `Qwen2.5-7B`, `Mistral-7B`, `Phi-3.5-mini`, etc.) or input custom Hugging Face model IDs and local weights.
-  - **Dataset Directory**: Auto-synced from Mode 1 conversion output, or selected via macOS Finder (`[F2]`).
+  - **Dataset Directory**: Auto-synced from Mode 1 conversion output, or selected via macOS Finder / local path entry.
   - **Method**: Select `lora`, `dora` (Weight-Decomposed Low-Rank Adaptation), or `full`.
   - **Optimizer**: Pick `adamw` or `adam`.
   - **Run Name**: Custom label or auto-generated descriptive run title.

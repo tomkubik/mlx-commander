@@ -80,13 +80,13 @@ class CommanderState:
 
     # UI navigation state
     active_panel: ActivePanel = ActivePanel.LEFT
-    left_focus_idx: int = 0   # 0: Browse button, 1: Edit path button, 2: Columns list
+    left_focus_idx: int = 0   # 0: Dataset path field, 1: Columns list
     right_focus_idx: int = 0  # 0: Format, 1-3: Mappings, 4-6: Splits, 7: Seed, 8: Output, 9: Convert button
     column_scroll_offset: int = 0
     selected_column_idx: int = 0
 
     # Status / notification
-    status_message: str = "Ready. Select [Finder (F2)] or press Enter to choose your dataset."
+    status_message: str = "Ready. Press Enter on Dataset to choose path or browse with Finder."
     status_is_error: bool = False
 
     # Reactive preview cache
