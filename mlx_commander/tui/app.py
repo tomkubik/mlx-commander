@@ -578,18 +578,18 @@ def _draw_mode2_dashboard(
     # always displays the full list of 14 hyperparameters without scrolling.
     # Middle tier (Resource & Training Estimates): 5-6 rows.
     # Bottom tier (Fine-Tuning Queue): shrunk to save vertical space; supports full scrolling.
-    if max_y >= 31:
+    if max_y >= 30:
         panel_h = 19
         vis_h = 6
-    elif max_y >= 29:
-        panel_h = 19
+    elif max_y >= 28:
         vis_h = 5
-    elif max_y >= 26:
-        panel_h = max(14, max_y - 10)
-        vis_h = 5
-    else:
-        panel_h = max(10, max_y - 9)
+        panel_h = min(19, max_y - 5 - vis_h)
+    elif max_y >= 25:
         vis_h = 4
+        panel_h = max(12, max_y - 5 - vis_h)
+    else:
+        vis_h = 4
+        panel_h = max(10, max_y - 9)
 
     vis_y = panel_h + 1
     queue_y = vis_y + vis_h
@@ -810,58 +810,59 @@ def _draw_mode2_dashboard(
             except Exception:
                 pass
 
+    gray_unbold = (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if curses.has_colors() else curses.A_DIM
+
     if epochs is not None:
-        epochs_str = f"• Implied Epochs:   {epochs:.2f} epochs  [(iters: {cfg.iters:,} × batch: {cfg.batch_size}) / {train_count:,} train records]"
-        safe_addstr(stdscr, vis_y + 1, 2, epochs_str[:max_x - 4], (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        lbl_part = f"• Implied Epochs:   {epochs:.2f} epochs"
+        calc_part = f"  [(iters: {cfg.iters:,} × batch: {cfg.batch_size}) / {train_count:,} train records]"
+        safe_addstr(stdscr, vis_y + 1, 2, lbl_part[:max_x - 4], white_unbold)
+        if len(lbl_part) + 2 < max_x - 4:
+            safe_addstr(stdscr, vis_y + 1, 2 + len(lbl_part), calc_part[:max_x - 4 - len(lbl_part)], gray_unbold)
     else:
-        safe_addstr(stdscr, vis_y + 1, 2, "• Implied Epochs:   (Select or specify dataset containing train.jsonl to calculate implied epochs)", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+        lbl_part = "• Implied Epochs:   "
+        calc_part = "(Select or specify dataset containing train.jsonl to calculate implied epochs)"
+        safe_addstr(stdscr, vis_y + 1, 2, lbl_part[:max_x - 4], white_unbold)
+        if len(lbl_part) + 2 < max_x - 4:
+            safe_addstr(stdscr, vis_y + 1, 2 + len(lbl_part), calc_part[:max_x - 4 - len(lbl_part)], gray_unbold)
 
     # Peak Unified RAM & Safety Rating (Row 2)
     mem_est = state.get_memory_estimate()
     lvl = mem_est.get("safety_level", "SAFE")
     if lvl == "SAFE":
-        lvl_attr = (get_color(COLOR_SUCCESS) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        lvl_attr = get_color(COLOR_SUCCESS) if curses.has_colors() else 0
         desc = "Safe fine-tuning headroom"
     elif lvl == "TIGHT":
-        lvl_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        lvl_attr = get_color(COLOR_TITLE_ACCENT) if curses.has_colors() else 0
         desc = "Close background applications"
     else:
-        lvl_attr = (get_color(COLOR_ERROR) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        lvl_attr = get_color(COLOR_ERROR) if curses.has_colors() else 0
         desc = "Reduce batch size or enable grad checkpoint"
 
     peak_gb = mem_est.get('peak_gb', 0)
     total_ram = mem_est.get('total_ram_gb', 16)
     pct = int(round(mem_est.get('usage_ratio', 0) * 100))
-    ram_line = f"• Peak Unified RAM: ~{peak_gb} GB / {total_ram} GB ({pct}%)  [{lvl}]  ({desc})"
-    safe_addstr(stdscr, vis_y + 2, 2, ram_line[:max_x - 4], lvl_attr)
+    ram_main = f"• Peak Unified RAM: ~{peak_gb} GB / {total_ram} GB ({pct}%)  [{lvl}]"
+    ram_desc = f"  ({desc})"
+    safe_addstr(stdscr, vis_y + 2, 2, ram_main[:max_x - 4], lvl_attr)
+    if len(ram_main) + 2 < max_x - 4:
+        safe_addstr(stdscr, vis_y + 2, 2 + len(ram_main), ram_desc[:max_x - 4 - len(ram_main)], gray_unbold)
 
-    # Memory Breakdown (Row 3)
+    # Memory Breakdown (Row 3) & Duration (Row 4)
     m_base = mem_est.get('base_model_gb', mem_est.get('model_gb', 0))
     m_act = mem_est.get('activations_gb', mem_est.get('act_gb', 0))
     m_opt = mem_est.get('optimizer_gb', mem_est.get('lora_opt_gb', 0))
     breakdown_line = f"  RAM Breakdown:    Base Model: {m_base} GB │ Activations: {m_act} GB │ LoRA Optimizer (fp32): {m_opt} GB"
     dur_est = state.get_duration_estimate()
-    dur_line = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')}) │ Hardware: {mem_est.get('chip_name', 'Apple Silicon')} ({total_ram} GB Unified RAM)"
+    dur_line = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')})"
 
     if vis_h >= 6:
-        safe_addstr(stdscr, vis_y + 3, 2, breakdown_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
-        safe_addstr(stdscr, vis_y + 4, 2, dur_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, vis_y + 3, 2, breakdown_line[:max_x - 4], gray_unbold)
+        safe_addstr(stdscr, vis_y + 4, 2, dur_line[:max_x - 4], white_unbold)
     else:
-        dur_compact = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')}) │ Base: {m_base} GB │ Act: {m_act} GB │ Opt: {m_opt} GB"
-        safe_addstr(stdscr, vis_y + 3, 2, dur_compact[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-
-    # Recommendation / Guidance (Row 5 if vis_h >= 7)
-    if vis_h >= 7:
-        if lvl == "SAFE":
-            rec = "  Recommendation:   Headroom is optimal for fine-tuning. Weights, activations, and AdamW states fit safely."
-            r_attr = get_color(COLOR_SUCCESS) if curses.has_colors() else 0
-        elif lvl == "TIGHT":
-            rec = "  Recommendation:   Unified memory is tight (>70%). Close background applications before launching fine-tuning."
-            r_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
-        else:
-            rec = "  Recommendation:   HIGH OOM RISK (>85%)! Enable Gradient Checkpointing or reduce batch size to avoid kernel panics."
-            r_attr = (get_color(COLOR_ERROR) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
-        safe_addstr(stdscr, vis_y + 5, 2, rec[:max_x - 4], r_attr)
+        safe_addstr(stdscr, vis_y + 3, 2, dur_line[:max_x - 4], white_unbold)
+        bd_compact = f" │ Base: {m_base} GB │ Act: {m_act} GB │ Opt: {m_opt} GB"
+        if len(dur_line) + 2 < max_x - 4:
+            safe_addstr(stdscr, vis_y + 3, 2 + len(dur_line), bd_compact[:max_x - 4 - len(dur_line)], gray_unbold)
 
     # 4. Bottom Panel: Queued Runs (with Config Spec displayed underneath each run)
     runs_list = state.queue_manager.runs if state.queue_manager else []

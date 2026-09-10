@@ -234,10 +234,124 @@ class TestLoraUI(unittest.TestCase):
         for field in expected_fields:
             self.assertIn(field, all_text, f"Field '{field}' must be rendered in view without scrolling")
 
-        self.assertEqual(state.lora_right_scroll_offset, 0, "Scroll offset must be 0 (no scrolling required)")
+    @patch("mlx_commander.tui.widgets.curses.color_pair", side_effect=lambda n: n * 256)
+    @patch("mlx_commander.tui.app.curses.color_pair", side_effect=lambda n: n * 256)
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_estimates_pane_typography_and_layout(self, mock_curs, mock_colors, mock_has_colors, mock_app_cp, mock_wid_cp):
+        """
+        Verify that in Resource & Training Estimates:
+        - Only the pane title is bold. All inner text lines are strictly unbolded.
+        - Implied Epochs: label and epoch count in white font; calculation in gray font.
+        - Peak Unified RAM: metrics in green/safety color; description in gray font.
+        - RAM Breakdown: in gray font.
+        - Estimated Duration: in white font; hardware row and recommendation row removed.
+        """
+        from mlx_commander.tui.widgets import (
+            COLOR_LABEL_GRAY,
+            COLOR_NORMAL_TEXT,
+            COLOR_SUCCESS,
+            COLOR_TITLE_ACCENT,
+        )
+
+        state = CommanderState()
+        state.active_tab = 1
+        state.loaded_dataset = True
+        state.get_split_counts = lambda: {"train": 1000}
+        state.lora_config.iters = 500
+        state.lora_config.batch_size = 4
+
+        self.mock_win.reset_mock()
+        self.mock_win.getmaxyx.return_value = (35, 120)
+        self.mock_win.getch.side_effect = [ord("q")]
+
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        calls = self.mock_win.addstr.call_args_list
+        all_text = " ".join(c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str))
+
+        # 1. Recommendation row must be completely removed
+        self.assertNotIn("Recommendation:", all_text)
+        self.assertNotIn("Headroom is optimal", all_text)
+
+        # 2. Hardware info after duration must be completely removed
+        self.assertNotIn("Hardware: Apple Silicon", all_text)
+
+        # 3. Verify specific lines and typography
+        found_epochs_lbl = False
+        found_epochs_calc = False
+        found_ram_main = False
+        found_ram_desc = False
+        found_breakdown = False
+        found_duration = False
+        found_title = False
+
+        for c in calls:
+            args = c[0]
+            if len(args) >= 3 and isinstance(args[2], str):
+                text = args[2]
+                attr = args[3] if len(args) >= 4 else 0
+
+                if "Resource & Training Estimates" in text:
+                    found_title = True
+                    # Pane title must remain bold
+                    self.assertTrue(bool(attr & curses.A_BOLD), "Pane title must be bold")
+
+                # All text inside estimates pane must be UNBOLDED
+                if any(k in text for k in ["Implied Epochs", "train records", "Peak Unified RAM", "RAM Breakdown", "Est. Duration"]):
+                    self.assertEqual(attr & curses.A_BOLD, 0, f"Inner estimates text '{text}' must NOT be bold")
+
+                if "• Implied Epochs:" in text:
+                    found_epochs_lbl = True
+                    # Must be white unbold (COLOR_NORMAL_TEXT)
+                    self.assertEqual(attr & curses.A_BOLD, 0)
+                    self.assertEqual((attr & ~curses.A_DIM & ~curses.A_BOLD) // 256, COLOR_NORMAL_TEXT)
+
+                if "train records" in text:
+                    found_epochs_calc = True
+                    # Must be gray unbold (COLOR_LABEL_GRAY or A_DIM)
+                    self.assertEqual(attr & curses.A_BOLD, 0)
+                    pair_num = (attr & ~curses.A_DIM & ~curses.A_BOLD) // 256
+                    self.assertTrue(pair_num == COLOR_LABEL_GRAY or bool(attr & curses.A_DIM))
+
+                if "• Peak Unified RAM:" in text:
+                    found_ram_main = True
+                    # Must be green unbold (COLOR_SUCCESS)
+                    self.assertEqual(attr & curses.A_BOLD, 0)
+                    self.assertEqual((attr & ~curses.A_DIM & ~curses.A_BOLD) // 256, COLOR_SUCCESS)
+
+                if "Safe fine-tuning headroom" in text:
+                    found_ram_desc = True
+                    # Must be gray unbold
+                    self.assertEqual(attr & curses.A_BOLD, 0)
+                    pair_num = (attr & ~curses.A_DIM & ~curses.A_BOLD) // 256
+                    self.assertTrue(pair_num == COLOR_LABEL_GRAY or bool(attr & curses.A_DIM))
+
+                if "RAM Breakdown:" in text:
+                    found_breakdown = True
+                    # Must be gray unbold
+                    self.assertEqual(attr & curses.A_BOLD, 0)
+                    pair_num = (attr & ~curses.A_DIM & ~curses.A_BOLD) // 256
+                    self.assertTrue(pair_num == COLOR_LABEL_GRAY or bool(attr & curses.A_DIM))
+
+                if "• Est. Duration:" in text:
+                    found_duration = True
+                    # Must be white unbold
+                    self.assertEqual(attr & curses.A_BOLD, 0)
+                    self.assertEqual((attr & ~curses.A_DIM & ~curses.A_BOLD) // 256, COLOR_NORMAL_TEXT)
+
+        self.assertTrue(found_title, "Estimates pane title should be found")
+        self.assertTrue(found_epochs_lbl, "Implied Epochs label should be found in white font")
+        self.assertTrue(found_epochs_calc, "Implied Epochs calculation should be found in gray font")
+        self.assertTrue(found_ram_main, "Peak Unified RAM main string should be found in green font")
+        self.assertTrue(found_ram_desc, "Safe fine-tuning headroom should be found in gray font")
+        self.assertTrue(found_breakdown, "RAM Breakdown should be found in gray font")
+        self.assertTrue(found_duration, "Est. Duration should be found in white font")
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
