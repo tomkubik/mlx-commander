@@ -4,16 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mlx-commander"
-version = "0.3.16"
+version = "0.3.17"
 description = "Convert Hugging Face datasets into Apple MLX formats, configure parameters, and run training and fine-tuning via interactive TUI and CLI"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     { name = "Tom Kubik" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
@@ -35,7 +39,7 @@ lance = [
     "pylance>=0.10.0",
 ]
 mcp = [
-    "mcp>=1.0.0",
+    "mcp>=1.0.0; python_version >= '3.10'",
 ]
 wandb = [
     "wandb>=0.16.0",
@@ -45,7 +49,7 @@ all = [
     "pyarrow>=12.0.0",
     "duckdb>=0.9.0",
     "pylance>=0.10.0",
-    "mcp>=1.0.0",
+    "mcp>=1.0.0; python_version >= '3.10'",
     "wandb>=0.16.0",
 ]
 
