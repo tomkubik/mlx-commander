@@ -398,6 +398,21 @@ class TestLoraUI(unittest.TestCase):
         self.assertIn("None", all_text)
         self.assertNotIn("Finder (F2)", all_text)
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_no_workflow_shortcuts_in_fine_tuning_left_panel(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify Workflow Shortcuts section is completely removed from Model & Dataset Selector pane."""
+        state = CommanderState()
+        state.active_tab = 1
+        self.mock_win.getmaxyx.return_value = (35, 110)
+        self.mock_win.getch.side_effect = [ord("q")]
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        calls = self.mock_win.addstr.call_args_list
+        all_text = " ".join(c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str))
+        self.assertNotIn("Workflow Shortcuts", all_text)
+
 
 if __name__ == "__main__":
     unittest.main()

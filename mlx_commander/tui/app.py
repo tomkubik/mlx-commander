@@ -642,28 +642,6 @@ def _draw_mode2_dashboard(
         name_disp = "…" + name_disp[-(left_w - 19):]
     draw_field(stdscr, 9, 2, "Run Name", name_disp, is_focused=name_focus, val_width=max(14, left_w - 18), right_edge=left_right_edge)
 
-    # Helpful workflow tips in lower section of Left Panel when panel_h is tall
-    if panel_h >= 16:
-        div_text = " Workflow Shortcuts "
-        pad_len = max(2, (left_w - 4 - len(div_text)) // 2)
-        div_line = "─" * pad_len + div_text + "─" * pad_len
-        safe_addstr(stdscr, 11, 2, div_line[:left_w - 4], (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
-
-        tips = [
-            ("Enter", "Browse Finder or Edit Path"),
-            ("F6", "Add Config to Queue"),
-            ("F5", "Run Queue Sequentially"),
-            ("Tab", "Switch Panels (Left/Right/Queue)"),
-            ("c/d", "Clone or Delete Queued Run"),
-        ]
-        key_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
-        tip_attr = (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM
-        for i, (k, desc) in enumerate(tips):
-            tip_y = 12 + i
-            if tip_y < panel_h:
-                safe_addstr(stdscr, tip_y, 3, f"• [{k}] ", key_attr)
-                safe_addstr(stdscr, tip_y, 3 + len(f"• [{k}] "), desc[:left_w - 4 - len(f"• [{k}] ")], tip_attr)
-
     # 2. Right Panel: Hyperparameters & Base Model Architecture (White non-bold specs)
     wb = state.get_wandb_status()
     if wb["enabled"]:
