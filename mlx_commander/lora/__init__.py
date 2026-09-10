@@ -18,6 +18,11 @@ from .estimator import (
     get_apple_silicon_chip,
     get_hardware_memory_bytes,
 )
+from .model_info import (
+    ModelMetadata,
+    inspect_local_model,
+    scan_local_models,
+)
 from .queue import QueueManager
 from .runner import run_lora_queue
 from .tracking import (
@@ -46,4 +51,7 @@ __all__ = [
     "is_wandb_available",
     "is_wandb_logged_in",
     "parse_mlx_log_line",
+    "ModelMetadata",
+    "inspect_local_model",
+    "scan_local_models",
 ]

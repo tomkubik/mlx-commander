@@ -96,11 +96,13 @@ class TestLoraUI(unittest.TestCase):
         run_commander_tui(self.mock_win, initial_state=state)
         self.assertEqual(len(state.queue_manager.runs), 0)
 
-    def test_show_model_picker_dialog(self):
-        # Press Down (select 2nd model) then Enter
+    @patch("mlx_commander.tui.widgets.show_text_edit_dialog", return_value="/local/path/to/model")
+    def test_show_model_picker_dialog(self, mock_text_edit):
+        # Press Down (select Enter Local Model Path Manually) then Enter
         self.mock_win.getch.side_effect = [curses.KEY_DOWN, 10]
         chosen = show_model_picker_dialog(self.mock_win)
-        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen, "/local/path/to/model")
+        mock_text_edit.assert_called_once()
 
     def test_show_choice_dialog(self):
         # Select option 1 with Down then Enter
@@ -146,4 +148,52 @@ class TestLoraUI(unittest.TestCase):
         run_commander_tui(self.mock_win, initial_state=state)
         self.assertEqual(state.lora_right_focus_idx, 1)
         self.assertEqual(state.lora_active_panel, "left")
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_model_hyperparameters_rendered_in_white_font(self, mock_curs, mock_colors, mock_has_colors):
+        from mlx_commander.lora.model_info import ModelMetadata
+        state = CommanderState()
+        state.active_tab = 1
+        state.lora_active_panel = "right"
+        state.lora_config.model = "/models/TestModel-3B"
+        state.current_model_metadata = ModelMetadata(
+            name="TestModel-3B",
+            path="/models/TestModel-3B",
+            architecture="llama",
+            num_layers=28,
+            hidden_size=3072,
+            num_heads=24,
+            num_kv_heads=8,
+            context_length=131072,
+            quantization="4-bit (group 64)",
+            file_size_gb=1.9,
+            is_valid=True,
+        )
+
+        self.mock_win.getch.side_effect = [ord("q")]
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        # Verify safe_addstr or addstr was called with model metadata
+        calls = self.mock_win.addstr.call_args_list
+        found_model = False
+        found_params = False
+        for c in calls:
+            args = c[0]
+            if len(args) >= 3 and isinstance(args[2], str):
+                text = args[2]
+                if "TestModel-3B" in text:
+                    found_model = True
+                    # Check that attr is not bold
+                    if len(args) >= 4:
+                        self.assertEqual(args[3] & curses.A_BOLD, 0)
+                if "28 layers" in text and "3072 dim" in text:
+                    found_params = True
+                    if len(args) >= 4:
+                        self.assertEqual(args[3] & curses.A_BOLD, 0)
+
+        self.assertTrue(found_model, "Base model name should be rendered in right panel")
+        self.assertTrue(found_params, "Base model architecture parameters should be rendered in right panel")
+
 

@@ -28,11 +28,13 @@ from mlx_commander.splitter import (
 )
 from mlx_commander.lora import (
     LoraRunConfig,
+    ModelMetadata,
     QueueManager,
     calculate_implied_epochs,
     estimate_duration,
     estimate_peak_memory,
     generate_deterministic_run_name,
+    inspect_local_model,
     is_wandb_available,
     is_wandb_logged_in,
 )
@@ -102,6 +104,7 @@ class CommanderState:
     lora_left_focus_idx: int = 0   # 0: Model, 1: Dataset, 2: Finder F2, 3: Method, 4: Optim, 5: Mode, 6: Run Name
     lora_right_focus_idx: int = 0  # 0 to 13 (sequential single column)
     lora_right_scroll_offset: int = 0
+    current_model_metadata: Optional[ModelMetadata] = None
 
     # Weights & Biases Experiment Tracking State
     wandb_enabled: bool = True
@@ -126,7 +129,14 @@ class CommanderState:
         if self.queue_manager is None:
             self.queue_manager = QueueManager(Path.cwd() / "mlx_runs")
         self.sync_dataset_to_lora()
+        self.inspect_current_model()
         self.update_deterministic_lora_name()
+
+    def inspect_current_model(self) -> ModelMetadata:
+        """Inspect and cache base model architecture metadata."""
+        meta = inspect_local_model(self.lora_config.model)
+        self.current_model_metadata = meta
+        return meta
 
     def get_wandb_status(self) -> Dict[str, Any]:
         """Return W&B availability and authentication status."""
@@ -213,6 +223,7 @@ class CommanderState:
         r = self.queue_manager.get_run(run_id)
         if r:
             self.lora_config = LoraRunConfig.from_dict(r.to_dict())
+            self.inspect_current_model()
             return True
         return False
 

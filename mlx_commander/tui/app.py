@@ -644,7 +644,7 @@ def _draw_mode2_dashboard(
         name_disp = "…" + name_disp[-(left_w - 19):]
     draw_field(stdscr, 10, 2, "Run Name", name_disp, is_focused=name_focus, val_width=max(14, left_w - 18), right_edge=left_right_edge)
 
-    # 2. Right Panel: Hyperparameters (Single Column, Ordered Sequentially, Right-Aligned)
+    # 2. Right Panel: Hyperparameters & Base Model Architecture (White non-bold specs)
     wb = state.get_wandb_status()
     if wb["enabled"]:
         wb_badge = f"W&B: @{wb.get('entity') or 'active'} ({wb.get('project')})"
@@ -665,8 +665,52 @@ def _draw_mode2_dashboard(
     )
 
     right_edge = max_x - 3
-    inner_h = max(1, panel_h - 2)
     cfg = state.lora_config
+
+    # Read base model metadata
+    meta = state.current_model_metadata
+    if meta is None or (state.lora_config.model and meta.path != state.lora_config.model and meta.name != state.lora_config.model):
+        meta = state.inspect_current_model()
+
+    # Base Model Name and Architecture Hyperparameters (Non-input fields, non-bold white font)
+    white_unbold = get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0
+
+    if panel_h >= 13:
+        # 2 lines of model architecture specs + 1 divider
+        if meta and meta.is_valid:
+            sz_str = f" ({meta.file_size_gb:.1f} GB)" if meta.file_size_gb > 0 else ""
+            m_line = f"• Model:  {meta.name}{sz_str}"
+            p_line = f"• Params: {meta.format_hyperparameters_line()}"
+        else:
+            m_line = f"• Model:  {cfg.model or '(No model selected on drive)'}"
+            p_line = "• Params: (Select a local model on drive to inspect architecture)"
+
+        safe_addstr(stdscr, 2, left_w + 2, m_line[:right_w - 4], white_unbold)
+        safe_addstr(stdscr, 3, left_w + 2, p_line[:right_w - 4], white_unbold)
+
+        # Subtle divider
+        div_text = " LoRA Fine-Tuning Hyperparameters "
+        pad_len = max(2, (right_w - 4 - len(div_text)) // 2)
+        div_line = "─" * pad_len + div_text + "─" * pad_len
+        safe_addstr(stdscr, 4, left_w + 2, div_line[:right_w - 4], (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+
+        field_start_y = 5
+        inner_h = max(1, panel_h - 5)
+    else:
+        # Compact 1-line model architecture info + 1 divider
+        if meta and meta.is_valid:
+            m_line = f"• Model: {meta.name} │ {meta.format_hyperparameters_line()}"
+        else:
+            m_line = f"• Model: {cfg.model or '(No model selected)'}"
+
+        safe_addstr(stdscr, 2, left_w + 2, m_line[:right_w - 4], white_unbold)
+        div_text = " LoRA Parameters "
+        pad_len = max(2, (right_w - 4 - len(div_text)) // 2)
+        div_line = "─" * pad_len + div_text + "─" * pad_len
+        safe_addstr(stdscr, 3, left_w + 2, div_line[:right_w - 4], (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+
+        field_start_y = 4
+        inner_h = max(1, panel_h - 4)
 
     fields_def = [
         (0, "Training Iterations", str(cfg.iters), 10, False),
@@ -685,7 +729,7 @@ def _draw_mode2_dashboard(
         (13, "+ Add to Queue (F6)", "", 0, True),
     ]
 
-    # Handle smooth scrolling in single-column hyperparameter list if panel_h < 16
+    # Handle smooth scrolling in single-column hyperparameter list
     if state.lora_right_focus_idx < state.lora_right_scroll_offset:
         state.lora_right_scroll_offset = state.lora_right_focus_idx
     elif state.lora_right_focus_idx >= state.lora_right_scroll_offset + inner_h:
@@ -695,7 +739,7 @@ def _draw_mode2_dashboard(
     for idx_in_view in range(min(inner_h, len(fields_def) - scroll_off)):
         f_idx = scroll_off + idx_in_view
         f_num, f_label, f_val, f_val_w, is_btn = fields_def[f_idx]
-        f_y = 2 + idx_in_view
+        f_y = field_start_y + idx_in_view
         is_foc = is_lora_right and (state.lora_right_focus_idx == f_num)
 
         if is_btn:
@@ -707,7 +751,7 @@ def _draw_mode2_dashboard(
 
     # Visual scroll indicators for Right Panel
     if scroll_off > 0:
-        safe_addstr(stdscr, 1, max_x - 4, "▲", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, field_start_y - 1, max_x - 4, "▲", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
     if scroll_off + inner_h < len(fields_def):
         safe_addstr(stdscr, panel_h, max_x - 4, "▼", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
 
@@ -1024,14 +1068,26 @@ def _handle_mode2_input(
     elif key in (curses.KEY_F2, 15):  # F2 or Ctrl+O (Finder)
         curses.def_prog_mode()
         curses.endwin()
-        from mlx_commander.gui_picker import pick_folder_gui
-        chosen = pick_folder_gui("Select Dataset Folder", default_dir=state.lora_config.data or os.getcwd())
-        curses.reset_prog_mode()
-        stdscr.refresh()
-        if chosen:
-            state.lora_config.data = chosen.strip()
-            state.status_message = f"Dataset folder set to: {chosen}"
-            state.status_is_error = False
+        if state.lora_active_panel == "left" and state.lora_left_focus_idx == 0:
+            from mlx_commander.gui_picker import pick_model_gui
+            chosen = pick_model_gui("Select Local Base Model (Folder or File)", default_dir=state.lora_config.model or os.getcwd())
+            curses.reset_prog_mode()
+            stdscr.refresh()
+            if chosen:
+                state.lora_config.model = chosen.strip()
+                state.inspect_current_model()
+                state.update_deterministic_lora_name()
+                state.status_message = f"Base model set to: {state.lora_config.model}"
+                state.status_is_error = False
+        else:
+            from mlx_commander.gui_picker import pick_folder_gui
+            chosen = pick_folder_gui("Select Dataset Folder", default_dir=state.lora_config.data or os.getcwd())
+            curses.reset_prog_mode()
+            stdscr.refresh()
+            if chosen:
+                state.lora_config.data = chosen.strip()
+                state.status_message = f"Dataset folder set to: {chosen}"
+                state.status_is_error = False
 
     # Navigation in Left Panel (Setup)
     elif state.lora_active_panel == "left":
@@ -1046,8 +1102,11 @@ def _handle_mode2_input(
             if idx == 0:  # Base Model
                 chosen = show_model_picker_dialog(stdscr, state.lora_config.model)
                 if chosen:
-                    state.lora_config.model = chosen
+                    state.lora_config.model = chosen.strip()
+                    state.inspect_current_model()
                     state.update_deterministic_lora_name()
+                    state.status_message = f"Base model set to: {state.lora_config.model}"
+                    state.status_is_error = False
             elif idx == 1:  # Dataset path
                 val = show_text_edit_dialog(
                     stdscr,
@@ -1060,14 +1119,26 @@ def _handle_mode2_input(
             elif idx == 2:  # Finder button
                 curses.def_prog_mode()
                 curses.endwin()
-                from mlx_commander.gui_picker import pick_folder_gui
-                chosen = pick_folder_gui("Select Dataset Folder", default_dir=state.lora_config.data or os.getcwd())
-                curses.reset_prog_mode()
-                stdscr.refresh()
-                if chosen:
-                    state.lora_config.data = chosen.strip()
-                    state.status_message = f"Dataset folder set to: {chosen}"
-                    state.status_is_error = False
+                if not state.lora_config.model:
+                    from mlx_commander.gui_picker import pick_model_gui
+                    chosen = pick_model_gui("Select Local Base Model (Folder or File)", default_dir=os.getcwd())
+                    curses.reset_prog_mode()
+                    stdscr.refresh()
+                    if chosen:
+                        state.lora_config.model = chosen.strip()
+                        state.inspect_current_model()
+                        state.update_deterministic_lora_name()
+                        state.status_message = f"Base model set to: {state.lora_config.model}"
+                        state.status_is_error = False
+                else:
+                    from mlx_commander.gui_picker import pick_folder_gui
+                    chosen = pick_folder_gui("Select Dataset Folder", default_dir=state.lora_config.data or os.getcwd())
+                    curses.reset_prog_mode()
+                    stdscr.refresh()
+                    if chosen:
+                        state.lora_config.data = chosen.strip()
+                        state.status_message = f"Dataset folder set to: {chosen}"
+                        state.status_is_error = False
             elif idx == 3:  # Method
                 chosen = show_choice_dialog(stdscr, "Fine-Tune Method", "Select technique:", FINE_TUNE_TYPES, state.lora_config.fine_tune_type)
                 if chosen:

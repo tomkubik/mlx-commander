@@ -1571,19 +1571,30 @@ def show_model_picker_dialog(
     current_model: str = "",
 ) -> Optional[str]:
     """
-    Modal dialog to pick a base model from popular Apple MLX 4-bit models or enter custom/local path.
+    Modal dialog to select a base model already saved on drive.
+    Allows browsing via native macOS Finder or entering a local model path.
     """
-    from mlx_commander.lora import POPULAR_MLX_MODELS
+    from mlx_commander.lora.model_info import scan_local_models
+    from mlx_commander.gui_picker import pick_model_gui
 
     configure_escdelay(25)
-    options: List[Tuple[str, str]] = list(POPULAR_MLX_MODELS)
-    options.append(("[ Custom HuggingFace Repo / Local Path... ]", "Enter custom repo ID or local checkpoint path"))
+    options: List[Tuple[str, str]] = [
+        ("[ 📁 Browse Drive with Finder (F2)... ]", "Select model folder or config.json via Finder"),
+        ("[ ✍ Enter Local Model Path Manually... ]", "Enter path to model directory or weights"),
+    ]
+
+    discovered = scan_local_models()
+    for m in discovered:
+        m_label = f"• {m.name}"
+        m_desc = f"{m.architecture} ({m.file_size_gb:.1f} GB) - {m.path}"
+        options.append((m_label, m_desc))
 
     sel_idx = 0
-    for i, (m_id, _) in enumerate(options):
-        if m_id == current_model:
-            sel_idx = i
-            break
+    if current_model:
+        for i, (m_id, _) in enumerate(options):
+            if current_model in m_id or m_id.endswith(current_model):
+                sel_idx = i
+                break
 
     max_y, max_x = stdscr.getmaxyx()
     h = min(len(options) + 6, max_y - 4, 16)
@@ -1595,7 +1606,7 @@ def show_model_picker_dialog(
 
     while True:
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
-        safe_addstr(stdscr, start_y, start_x + 2, " Select Base Model for Fine-Tuning ", (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        safe_addstr(stdscr, start_y, start_x + 2, " Select Local Base Model on Drive ", (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         for r in range(1, h - 1):
             safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(COLOR_BORDER_JOINTS) if safe_has_colors() else 0)
         safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
@@ -1614,7 +1625,7 @@ def show_model_picker_dialog(
                 m_id, desc = options[opt_idx]
                 is_focused = (opt_idx == sel_idx)
                 prefix = " ▶ " if is_focused else "   "
-                short_m = m_id if len(m_id) <= 42 else m_id.split("/")[-1]
+                short_m = m_id if len(m_id) <= 42 else m_id[:39] + "…"
                 line_str = f"{prefix}{short_m:<42} {desc}"[: w - 4]
                 if is_focused:
                     attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
@@ -1633,18 +1644,32 @@ def show_model_picker_dialog(
         elif k in (27, ord("q"), ord("Q")):
             return None
         elif k in (10, 13, 32):  # Enter or Space
-            chosen_id = options[sel_idx][0]
-            if chosen_id.startswith("[ Custom"):
+            if sel_idx == 0:  # Browse Drive with Finder
+                curses.def_prog_mode()
+                curses.endwin()
+                chosen = pick_model_gui(prompt="Select Local Base Model (Folder or File)", default_dir=current_model or os.getcwd())
+                curses.reset_prog_mode()
+                stdscr.refresh()
+                if chosen and chosen.strip():
+                    return chosen.strip()
+                # If Finder was cancelled or not supported, continue dialog
+                continue
+            elif sel_idx == 1:  # Enter Local Model Path Manually
                 val = show_text_edit_dialog(
                     stdscr,
-                    "Custom Model",
-                    "Enter HuggingFace repo ID (e.g. mlx-community/...) or local directory path:",
+                    "Local Model Path",
+                    "Enter path to local model folder or config.json:",
                     default_val=current_model,
                 )
                 if val and val.strip():
                     return val.strip()
                 return None
-            return chosen_id
+            else:
+                # Discovered model selected
+                disc_idx = sel_idx - 2
+                if 0 <= disc_idx < len(discovered):
+                    return discovered[disc_idx].path
+                return options[sel_idx][0]
 
 
 def show_choice_dialog(
