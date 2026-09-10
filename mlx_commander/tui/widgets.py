@@ -1562,6 +1562,12 @@ def draw_queue_table(
 
             safe_addstr(win, row_y + 1, x, spec_line[:w], attr_line2)
 
+    # Visual scroll indicators for Queue panel
+    if scroll_offset > 0:
+        safe_addstr(win, header_y, x + w - 2, "▲", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+    if scroll_offset + avail_items < len(runs):
+        safe_addstr(win, header_y + h - 1, x + w - 2, "▼", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+
     return selected_idx
 
 

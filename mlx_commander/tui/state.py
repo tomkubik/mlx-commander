@@ -104,6 +104,7 @@ class CommanderState:
     lora_left_focus_idx: int = 0   # 0: Model, 1: Dataset, 2: Finder F2, 3: Method, 4: Optim, 5: Mode, 6: Run Name
     lora_right_focus_idx: int = 0  # 0 to 13 (sequential single column)
     lora_right_scroll_offset: int = 0
+    lora_queue_scroll_offset: int = 0
     current_model_metadata: Optional[ModelMetadata] = None
 
     # Weights & Biases Experiment Tracking State

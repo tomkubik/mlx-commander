@@ -573,20 +573,27 @@ def _draw_mode2_dashboard(
     right_w: int,
 ) -> None:
     """Draw Mode 2: Apple MLX LoRA Fine-Tuning Dashboard & Queue."""
-    # Height allocations across 3 tiers
-    if max_y >= 36:
-        panel_h = 16
-        vis_h = 7
-    elif max_y >= 28:
-        panel_h = max(11, min(15, (max_y - 10) * 5 // 9))
+    # Height allocations across 3 tiers:
+    # Top tier (Left & Right panels): prioritized to panel_h >= 19 so the hyperparameter pane
+    # always displays the full list of 14 hyperparameters without scrolling.
+    # Middle tier (Resource & Training Estimates): 5-6 rows.
+    # Bottom tier (Fine-Tuning Queue): shrunk to save vertical space; supports full scrolling.
+    if max_y >= 31:
+        panel_h = 19
         vis_h = 6
-    else:
-        panel_h = max(9, min(13, max_y // 3))
+    elif max_y >= 29:
+        panel_h = 19
         vis_h = 5
+    elif max_y >= 26:
+        panel_h = max(14, max_y - 10)
+        vis_h = 5
+    else:
+        panel_h = max(10, max_y - 9)
+        vis_h = 4
 
     vis_y = panel_h + 1
     queue_y = vis_y + vis_h
-    queue_h = max(4, max_y - 1 - queue_y)
+    queue_h = max(3, max_y - 1 - queue_y)
 
     is_lora_left = (state.lora_active_panel == "left")
     is_lora_right = (state.lora_active_panel == "right")
@@ -644,6 +651,28 @@ def _draw_mode2_dashboard(
         name_disp = "…" + name_disp[-(left_w - 19):]
     draw_field(stdscr, 10, 2, "Run Name", name_disp, is_focused=name_focus, val_width=max(14, left_w - 18), right_edge=left_right_edge)
 
+    # Helpful workflow tips in lower section of Left Panel when panel_h is tall
+    if panel_h >= 16:
+        div_text = " Workflow Shortcuts "
+        pad_len = max(2, (left_w - 4 - len(div_text)) // 2)
+        div_line = "─" * pad_len + div_text + "─" * pad_len
+        safe_addstr(stdscr, 12, 2, div_line[:left_w - 4], (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+
+        tips = [
+            ("F2", "Browse Finder for Model/Data"),
+            ("F6", "Add Config to Queue"),
+            ("F5", "Run Queue Sequentially"),
+            ("Tab", "Switch Panels (Left/Right/Queue)"),
+            ("c/d", "Clone or Delete Queued Run"),
+        ]
+        key_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        tip_attr = (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM
+        for i, (k, desc) in enumerate(tips):
+            tip_y = 13 + i
+            if tip_y < panel_h:
+                safe_addstr(stdscr, tip_y, 3, f"• [{k}] ", key_attr)
+                safe_addstr(stdscr, tip_y, 3 + len(f"• [{k}] "), desc[:left_w - 4 - len(f"• [{k}] ")], tip_attr)
+
     # 2. Right Panel: Hyperparameters & Base Model Architecture (White non-bold specs)
     wb = state.get_wandb_status()
     if wb["enabled"]:
@@ -675,7 +704,7 @@ def _draw_mode2_dashboard(
     # Base Model Name and Architecture Hyperparameters (Non-input fields, non-bold white font)
     white_unbold = get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else 0
 
-    if panel_h >= 13:
+    if panel_h >= 19:
         # 2 lines of model architecture specs + 1 divider
         if meta and meta.is_valid:
             sz_str = f" ({meta.file_size_gb:.1f} GB)" if meta.file_size_gb > 0 else ""
@@ -811,12 +840,15 @@ def _draw_mode2_dashboard(
     m_act = mem_est.get('activations_gb', mem_est.get('act_gb', 0))
     m_opt = mem_est.get('optimizer_gb', mem_est.get('lora_opt_gb', 0))
     breakdown_line = f"  RAM Breakdown:    Base Model: {m_base} GB │ Activations: {m_act} GB │ LoRA Optimizer (fp32): {m_opt} GB"
-    safe_addstr(stdscr, vis_y + 3, 2, breakdown_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
-
-    # Duration & Throughput (Row 4)
     dur_est = state.get_duration_estimate()
     dur_line = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')}) │ Hardware: {mem_est.get('chip_name', 'Apple Silicon')} ({total_ram} GB Unified RAM)"
-    safe_addstr(stdscr, vis_y + 4, 2, dur_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+
+    if vis_h >= 6:
+        safe_addstr(stdscr, vis_y + 3, 2, breakdown_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, vis_y + 4, 2, dur_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+    else:
+        dur_compact = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')}) │ Base: {m_base} GB │ Act: {m_act} GB │ Opt: {m_opt} GB"
+        safe_addstr(stdscr, vis_y + 3, 2, dur_compact[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
 
     # Recommendation / Guidance (Row 5 if vis_h >= 7)
     if vis_h >= 7:
@@ -841,7 +873,7 @@ def _draw_mode2_dashboard(
         max_x,
         "Fine-Tuning Queue (Sequential Execution)",
         is_focused=is_lora_queue,
-        subtitle=f"{len(runs_list)} run(s) queued │ F5: Run Queue │ c: Clone │ d: Delete │ x: Clear │ Enter: Load",
+        subtitle=f"{len(runs_list)} run(s) queued (↑/↓ to scroll) │ F5: Run Queue │ c: Clone │ d: Delete │ x: Clear │ Enter: Load",
     )
     state.selected_queue_idx = draw_queue_table(
         stdscr,
@@ -852,6 +884,7 @@ def _draw_mode2_dashboard(
         runs_list,
         selected_idx=state.selected_queue_idx,
         is_focused=is_lora_queue,
+        scroll_offset=state.lora_queue_scroll_offset,
     )
 
 
@@ -1260,6 +1293,10 @@ def _handle_mode2_input(
         elif key in (curses.KEY_DOWN, ord("j")):
             if state.selected_queue_idx < num_runs - 1:
                 state.selected_queue_idx += 1
+        elif key in (curses.KEY_HOME,):
+            state.selected_queue_idx = 0
+        elif key in (curses.KEY_END,):
+            state.selected_queue_idx = max(0, num_runs - 1)
         elif key in (ord("c"), ord("C")):  # Clone
             if state.queue_manager and state.queue_manager.runs:
                 curr_r = state.queue_manager.runs[state.selected_queue_idx]

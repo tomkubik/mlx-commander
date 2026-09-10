@@ -196,4 +196,48 @@ class TestLoraUI(unittest.TestCase):
         self.assertTrue(found_model, "Base model name should be rendered in right panel")
         self.assertTrue(found_params, "Base model architecture parameters should be rendered in right panel")
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_hyperparameters_pane_displays_all_fields_without_scrolling(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify that the hyperparameter pane displays all 14 fields simultaneously without scrolling."""
+        state = CommanderState()
+        state.active_tab = 1
+        state.lora_active_panel = "right"
+        self.mock_win.reset_mock()
+        self.mock_win.getmaxyx.return_value = (35, 120)
+        self.mock_win.getch.side_effect = [ord("q")]
+
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        calls = self.mock_win.addstr.call_args_list
+        rendered_texts = [c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str)]
+        all_text = " ".join(rendered_texts)
+
+        # Check all 14 fields and button are present in a single frame
+        expected_fields = [
+            "Training Iterations",
+            "Batch Size",
+            "Learning Rate",
+            "LoRA Rank (r)",
+            "LoRA Alpha (α)",
+            "LoRA Dropout",
+            "Max Seq Length",
+            "Fine-Tuned Layers",
+            "Grad Checkpoint",
+            "Mask Prompt",
+            "Save Every",
+            "Steps per Eval",
+            "Adapter Path",
+            "+ Add to Queue (F6)",
+        ]
+        for field in expected_fields:
+            self.assertIn(field, all_text, f"Field '{field}' must be rendered in view without scrolling")
+
+        self.assertEqual(state.lora_right_scroll_offset, 0, "Scroll offset must be 0 (no scrolling required)")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
 
