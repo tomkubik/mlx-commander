@@ -196,6 +196,17 @@ Examples:
         default=None,
         help="Execute LoRA fine-tuning runs sequentially from queue directory (default: 'mlx_runs').",
     )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="mlx-commander",
+        help="Weights & Biases project name for experiment tracking (default: 'mlx-commander').",
+    )
+    parser.add_argument(
+        "--no-wandb",
+        action="store_true",
+        help="Disable Weights & Biases experiment logging even if wandb is installed and logged in.",
+    )
 
     return parser
 
@@ -282,7 +293,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.run_queue is not None:
         from mlx_commander.lora import run_lora_queue
         q_dir = Path(args.run_queue)
-        ok = run_lora_queue(q_dir)
+        ok = run_lora_queue(
+            q_dir,
+            wandb_project=args.wandb_project,
+            enable_wandb=not args.no_wandb,
+        )
         return 0 if ok else 1
 
     # Normalize dataset path argument
@@ -389,6 +404,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.lora:
         prefill_dict["tab"] = 1
         prefill_dict["active_tab"] = 1
+    if args.wandb_project:
+        prefill_dict["wandb_project"] = args.wandb_project
+    if args.no_wandb:
+        prefill_dict["wandb_enabled"] = False
 
     # Check if external terminal window should be spawned
     from mlx_commander.terminal_spawner import is_macos, spawn_terminal_tui

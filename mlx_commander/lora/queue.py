@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .config import LoraRunConfig
+from .config import LoraRunConfig, generate_deterministic_run_name
 
 
 class QueueManager:
@@ -57,7 +57,7 @@ class QueueManager:
             r.log_file = str(self.logs_dir / f"{r.id}.log")
 
         data = {
-            "version": "0.3.0",
+            "version": "0.3.1",
             "queue_dir": str(self.queue_dir),
             "runs": [r.to_dict() for r in self.runs],
         }
@@ -70,6 +70,11 @@ class QueueManager:
 
     def add_run(self, config: LoraRunConfig) -> LoraRunConfig:
         """Add a new run to the end of the FIFO queue and persist."""
+        next_idx = len(self.runs) + 1
+        config.sequence_index = next_idx
+        if not config.is_custom_name:
+            config.name = generate_deterministic_run_name(config, index=next_idx)
+            config.adapter_path = f"adapters/{config.name}"
         self.runs.append(config)
         self.save()
         return config
@@ -90,20 +95,33 @@ class QueueManager:
         return False
 
     def clone_run(self, run_id: str) -> Optional[LoraRunConfig]:
-        """Duplicate an existing run with a fresh ID and append to queue."""
+        """Clone an existing run with a new UUID and next sequential index."""
         target = self.get_run(run_id)
         if not target:
             return None
-        new_dict = target.to_dict()
-        new_dict["id"] = f"run_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-        new_dict["name"] = f"Copy of {target.name}"
-        new_dict["status"] = "queued"
-        new_dict["started_at"] = None
-        new_dict["finished_at"] = None
-        new_dict["exit_code"] = None
-        new_dict["error_message"] = None
-        cloned = LoraRunConfig.from_dict(new_dict)
-        self.add_run(cloned)
+
+        import copy
+        cloned = LoraRunConfig.from_dict(copy.deepcopy(target.to_dict()))
+        cloned.id = f"run_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+        cloned.status = "queued"
+        cloned.started_at = None
+        cloned.finished_at = None
+        cloned.exit_code = None
+        cloned.error_message = None
+        cloned.log_file = None
+        cloned.wandb_url = None
+
+        next_idx = len(self.runs) + 1
+        cloned.sequence_index = next_idx
+        if not target.is_custom_name:
+            cloned.name = generate_deterministic_run_name(cloned, index=next_idx)
+            cloned.is_custom_name = False
+        else:
+            cloned.name = f"Copy of {target.name}"
+            cloned.is_custom_name = True
+        cloned.adapter_path = f"adapters/{cloned.name}"
+        self.runs.append(cloned)
+        self.save()
         return cloned
 
     def clear_queue(self, only_pending: bool = False) -> None:

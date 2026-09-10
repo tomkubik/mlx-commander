@@ -154,3 +154,27 @@ Upon completion, MLX Commander writes `mlx_manifest.json` inside the output dire
    ```
 
 If the user cancelled in the TUI, exit code `130` is returned. Acknowledge cancellation without executing further training steps.
+
+---
+
+### Step 5: LoRA Fine-Tuning Queue & Experiment Tracking (Weights & Biases)
+
+MLX Commander provides a dedicated LoRA fine-tuning dashboard (Mode 2) with sequential queue execution, deterministic run naming, and Weights & Biases (W&B) experiment tracking:
+
+1. **Launch Directly into LoRA Mode**:
+   ```bash
+   mlx_commander --lora --spawn-terminal
+   ```
+2. **Deterministic Run Naming**:
+   Consecutive runs automatically receive self-documenting, chronologically sortable names:
+   `{index:02d}_{method}_r{rank}_a{alpha}_lr{lr}_b{batch}_i{iters}_{model_slug}`
+   (e.g., `01_lora_r16_a32_lr1e-5_b4_i1000_Llama-3.2-3B-Instruct-4bit`).
+3. **Weights & Biases (W&B) Tracking**:
+   If the user is logged into W&B on the machine (`wandb login`, `~/.netrc`, or `WANDB_API_KEY`), fine-tuning runs automatically log system hardware, hyperparameters, and stream real-time loss, learning rate, and throughput metrics.
+   - Use `--wandb-project <project>` to target a specific project (default: `mlx-commander`).
+   - Use `--no-wandb` to disable online tracking even if logged in.
+4. **Sequential Execution**:
+   Queued runs execute sequentially to protect Apple Silicon Unified Memory:
+   ```bash
+   mlx_commander --run-queue ./mlx_runs
+   ```

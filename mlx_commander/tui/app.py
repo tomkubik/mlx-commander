@@ -235,8 +235,15 @@ def execute_lora_queue_action(stdscr: curses.window, state: CommanderState) -> N
 
     state.queue_manager.save()
 
+    wb_stat = state.get_wandb_status()
+    wb_desc = f"Connected ({wb_stat['project']})" if wb_stat["enabled"] else ("Offline" if not wb_stat["available"] else "Disabled/Not logged in")
+
     if is_macos():
-        spawned = spawn_lora_queue_terminal(str(state.queue_manager.queue_dir))
+        spawned = spawn_lora_queue_terminal(
+            str(state.queue_manager.queue_dir),
+            wandb_project=state.wandb_project,
+            enable_wandb=state.wandb_enabled,
+        )
         if spawned:
             show_message_dialog(
                 stdscr,
@@ -246,6 +253,7 @@ def execute_lora_queue_action(stdscr: curses.window, state: CommanderState) -> N
                     "",
                     "• Runs execute sequentially to protect Apple Silicon Unified Memory.",
                     "• Real-time loss, throughput, and progress stream in the Terminal window.",
+                    f"• Weights & Biases: {wb_desc}",
                     "• You may safely close MLX Commander without interrupting training.",
                 ],
             )
@@ -627,6 +635,14 @@ def _draw_mode2_dashboard(
     draw_field(stdscr, 10, 2, "Run Name", name_disp, is_focused=name_focus, val_width=left_w - 16)
 
     # 2. Right Panel: Hyperparameters & Unified Memory Estimator
+    wb = state.get_wandb_status()
+    if wb["enabled"]:
+        wb_badge = f"W&B: @{wb.get('entity') or 'active'} ({wb.get('project')})"
+    elif wb["available"]:
+        wb_badge = "W&B: [Not Logged In]"
+    else:
+        wb_badge = "W&B: [Offline]"
+
     draw_box_panel(
         stdscr,
         1,
@@ -635,7 +651,7 @@ def _draw_mode2_dashboard(
         right_w,
         "LoRA Hyperparameters & Unified Memory Estimator",
         is_focused=is_lora_right,
-        subtitle="Step 2: Config",
+        subtitle=f"Step 2: Config │ {wb_badge}",
     )
 
     col1_x = left_w + 2
@@ -980,8 +996,7 @@ def _handle_mode2_input(
                 chosen = show_model_picker_dialog(stdscr, state.lora_config.model)
                 if chosen:
                     state.lora_config.model = chosen
-                    model_slug = chosen.split("/")[-1].replace("-Instruct", "").replace("-4bit", "")
-                    state.lora_config.name = f"{model_slug} (lr={state.lora_config.learning_rate:g}, r={state.lora_config.lora_rank})"
+                    state.update_deterministic_lora_name()
             elif idx == 1:  # Dataset path
                 val = show_text_edit_dialog(
                     stdscr,
@@ -1006,6 +1021,7 @@ def _handle_mode2_input(
                 chosen = show_choice_dialog(stdscr, "Fine-Tune Method", "Select technique:", FINE_TUNE_TYPES, state.lora_config.fine_tune_type)
                 if chosen:
                     state.lora_config.fine_tune_type = chosen
+                    state.update_deterministic_lora_name()
             elif idx == 4:  # Optimizer
                 chosen = show_choice_dialog(stdscr, "Optimizer", "Select training optimizer:", OPTIMIZERS, state.lora_config.optimizer)
                 if chosen:
@@ -1016,6 +1032,8 @@ def _handle_mode2_input(
                 val = show_text_edit_dialog(stdscr, "Run Name", "Enter descriptive label for this run:", default_val=state.lora_config.name)
                 if val:
                     state.lora_config.name = val.strip()
+                    state.lora_config.is_custom_name = True
+                    state.lora_config.adapter_path = f"adapters/{state.lora_config.name}"
 
     # Navigation in Right Panel (Hyperparameters)
     elif state.lora_active_panel == "right":
@@ -1036,27 +1054,37 @@ def _handle_mode2_input(
             if idx == 0:  # Iters
                 val = show_text_edit_dialog(stdscr, "Training Iterations", "Enter number of iterations (e.g. 1000):", str(state.lora_config.iters), is_number=True)
                 if val:
-                    try: state.lora_config.iters = max(1, int(val))
+                    try:
+                        state.lora_config.iters = max(1, int(val))
+                        state.update_deterministic_lora_name()
                     except ValueError: pass
             elif idx == 1:  # Batch Size
                 val = show_text_edit_dialog(stdscr, "Batch Size", "Enter micro-batch size (e.g. 4):", str(state.lora_config.batch_size), is_number=True)
                 if val:
-                    try: state.lora_config.batch_size = max(1, int(val))
+                    try:
+                        state.lora_config.batch_size = max(1, int(val))
+                        state.update_deterministic_lora_name()
                     except ValueError: pass
             elif idx == 2:  # Learning Rate
                 val = show_text_edit_dialog(stdscr, "Learning Rate", "Enter learning rate (e.g. 1e-5):", f"{state.lora_config.learning_rate:g}")
                 if val:
-                    try: state.lora_config.learning_rate = float(val)
+                    try:
+                        state.lora_config.learning_rate = float(val)
+                        state.update_deterministic_lora_name()
                     except ValueError: pass
             elif idx == 3:  # LoRA Rank
                 val = show_text_edit_dialog(stdscr, "LoRA Rank", "Enter rank dimension r (e.g. 8, 16):", str(state.lora_config.lora_rank), is_number=True)
                 if val:
-                    try: state.lora_config.lora_rank = max(1, int(val))
+                    try:
+                        state.lora_config.lora_rank = max(1, int(val))
+                        state.update_deterministic_lora_name()
                     except ValueError: pass
             elif idx == 4:  # LoRA Alpha
                 val = show_text_edit_dialog(stdscr, "LoRA Scale / Alpha", "Enter alpha scaling factor (e.g. 16.0):", f"{state.lora_config.lora_alpha:g}")
                 if val:
-                    try: state.lora_config.lora_alpha = float(val)
+                    try:
+                        state.lora_config.lora_alpha = float(val)
+                        state.update_deterministic_lora_name()
                     except ValueError: pass
             elif idx == 5:  # LoRA Dropout
                 val = show_text_edit_dialog(stdscr, "LoRA Dropout", "Enter dropout probability (0.0 to 0.5):", f"{state.lora_config.lora_dropout:g}")
@@ -1091,6 +1119,7 @@ def _handle_mode2_input(
                 val = show_text_edit_dialog(stdscr, "Adapter Path", "Directory to store fine-tuned LoRA weights:", state.lora_config.adapter_path)
                 if val:
                     state.lora_config.adapter_path = val.strip()
+                    state.lora_config.is_custom_name = True
             elif idx == 13:  # Add to Queue
                 added = state.add_current_lora_to_queue()
                 state.status_message = f"Added '{added.name}' to queue ({len(state.queue_manager.runs)} run(s) queued)."

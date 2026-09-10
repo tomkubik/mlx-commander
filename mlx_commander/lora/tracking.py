@@ -1,0 +1,235 @@
+"""
+Weights & Biases (W&B) Experiment Tracking Integration for MLX Commander.
+Automatically detects user authentication, initializes experiment tracking,
+and streams real-time loss & throughput metrics from mlx_lm.lora runs.
+"""
+
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+from .config import LoraRunConfig, sanitize_model_slug
+from .estimator import get_apple_silicon_chip, get_hardware_memory_bytes
+
+
+def is_wandb_available() -> bool:
+    """Return True if the 'wandb' package is installed."""
+    try:
+        import wandb  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def is_wandb_logged_in() -> Tuple[bool, Optional[str]]:
+    """
+    Check if the user is authenticated with Weights & Biases on this system.
+    Returns (is_logged_in, entity_or_username).
+    """
+    # 1. Environment variable
+    if os.environ.get("WANDB_API_KEY"):
+        try:
+            import wandb
+            api = wandb.Api()
+            return True, api.viewer.entity or api.default_entity
+        except Exception:
+            return True, "env_user"
+
+    # 2. Check ~/.netrc
+    netrc_path = Path("~/.netrc").expanduser()
+    if netrc_path.exists():
+        try:
+            with open(netrc_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            if "api.wandb.ai" in content:
+                # User has logged in via 'wandb login'
+                try:
+                    import wandb
+                    api = wandb.Api()
+                    return True, api.viewer.entity or api.default_entity
+                except Exception:
+                    return True, "wandb_user"
+        except Exception:
+            pass
+
+    # 3. Check wandb API credentials directly if library is installed
+    if is_wandb_available():
+        try:
+            import wandb
+            api = wandb.Api()
+            if api.api_key:
+                return True, api.viewer.entity or api.default_entity
+        except Exception:
+            pass
+
+    return False, None
+
+
+def parse_mlx_log_line(line: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse real-time training and validation stdout lines from mlx_lm.lora.
+    Supported patterns:
+      'Iter 100: Train loss 1.450, Learning Rate 1.000e-05, It/sec 1.150, Tokens/sec 1200.0'
+      'Iter 200: Val loss 2.100, Val It/sec 2.000'
+      'Iter 50: Train loss 0.982'
+    """
+    if not line or "Iter" not in line:
+        return None
+
+    # Match iteration index
+    iter_match = re.search(r'Iter\s+(\d+):', line)
+    if not iter_match:
+        return None
+
+    step = int(iter_match.group(1))
+    metrics: Dict[str, Any] = {"iter": step}
+
+    # Train loss
+    train_loss_m = re.search(r'Train loss\s+([0-9.]+)', line)
+    if train_loss_m:
+        try:
+            metrics["train/loss"] = float(train_loss_m.group(1))
+        except ValueError:
+            pass
+
+    # Val loss
+    val_loss_m = re.search(r'Val loss\s+([0-9.]+)', line)
+    if val_loss_m:
+        try:
+            metrics["val/loss"] = float(val_loss_m.group(1))
+        except ValueError:
+            pass
+
+    # Learning rate
+    lr_m = re.search(r'Learning Rate\s+([0-9.eE+-]+)', line)
+    if lr_m:
+        try:
+            metrics["train/learning_rate"] = float(lr_m.group(1))
+        except ValueError:
+            pass
+
+    # Iterations per second (train or val)
+    it_sec_m = re.search(r'(?<!Val\s)It/sec\s+([0-9.]+)', line)
+    if it_sec_m:
+        try:
+            metrics["train/it_per_sec"] = float(it_sec_m.group(1))
+        except ValueError:
+            pass
+
+    val_it_sec_m = re.search(r'Val It/sec\s+([0-9.]+)', line)
+    if val_it_sec_m:
+        try:
+            metrics["val/it_per_sec"] = float(val_it_sec_m.group(1))
+        except ValueError:
+            pass
+
+    # Tokens per second
+    tok_sec_m = re.search(r'Tokens/sec\s+([0-9.]+)', line)
+    if tok_sec_m:
+        try:
+            metrics["train/tokens_per_sec"] = float(tok_sec_m.group(1))
+        except ValueError:
+            pass
+
+    if len(metrics) > 1:
+        return metrics
+    return None
+
+
+class WandbTracker:
+    """
+    Safely manages a Weights & Biases tracking run.
+    Guarantees zero-crash operation: any W&B API or network issues
+    will never interrupt active MLX fine-tuning.
+    """
+
+    def __init__(self, project: Optional[str] = None, enabled: bool = True):
+        self.project = project or "mlx-commander"
+        self.enabled = enabled
+        self.run = None
+        self.run_url: Optional[str] = None
+        self._is_active = False
+
+    def start_run(
+        self,
+        config: LoraRunConfig,
+        implied_epochs: Optional[float] = None,
+    ) -> bool:
+        """Initialize a Weights & Biases run for the given LoRA configuration."""
+        if not self.enabled or not is_wandb_available():
+            return False
+
+        logged_in, entity = is_wandb_logged_in()
+        if not logged_in:
+            return False
+
+        try:
+            import wandb
+
+            wandb_config = config.to_dict()
+            wandb_config["hardware_chip"] = get_apple_silicon_chip()
+            wandb_config["hardware_memory_gb"] = round(get_hardware_memory_bytes() / (1024 ** 3), 1)
+            if implied_epochs is not None:
+                wandb_config["implied_epochs"] = round(implied_epochs, 2)
+
+            tags = [
+                "mlx",
+                "apple-silicon",
+                config.fine_tune_type,
+                sanitize_model_slug(config.model),
+            ]
+
+            proj_name = config.wandb_project or self.project or "mlx-commander"
+            self.run = wandb.init(
+                project=proj_name,
+                name=config.name,
+                config=wandb_config,
+                tags=tags,
+                reinit=True,
+            )
+            self._is_active = True
+            try:
+                self.run_url = self.run.get_url()
+            except Exception:
+                self.run_url = getattr(self.run, "url", None)
+
+            print(f"[W&B] Tracking run at: {self.run_url}")
+            return True
+        except Exception as e:
+            sys.stderr.write(f"[W&B Warning] Failed to initialize Weights & Biases tracking: {e}\n")
+            self._is_active = False
+            return False
+
+    def log_line(self, line: str) -> None:
+        """Parse stdout line and log metrics to W&B if available."""
+        if not self._is_active or not self.run:
+            return
+
+        metrics = parse_mlx_log_line(line)
+        if metrics:
+            try:
+                import wandb
+                step = metrics.pop("iter", None)
+                wandb.log(metrics, step=step)
+            except Exception:
+                pass
+
+    def finish_run(self, exit_code: int = 0) -> Optional[str]:
+        """Finish the W&B run, recording exit code and returning the run URL."""
+        if not self._is_active or not self.run:
+            return None
+
+        try:
+            import wandb
+            self.run.summary["exit_code"] = exit_code
+            self.run.summary["status"] = "completed" if exit_code == 0 else "failed"
+            url = self.run_url
+            wandb.finish(exit_code=exit_code)
+            self._is_active = False
+            return url
+        except Exception as e:
+            sys.stderr.write(f"[W&B Warning] Failed to close run cleanly: {e}\n")
+            self._is_active = False
+            return self.run_url

@@ -32,6 +32,9 @@ from mlx_commander.lora import (
     calculate_implied_epochs,
     estimate_duration,
     estimate_peak_memory,
+    generate_deterministic_run_name,
+    is_wandb_available,
+    is_wandb_logged_in,
 )
 
 
@@ -99,6 +102,10 @@ class CommanderState:
     lora_left_focus_idx: int = 0   # 0: Dataset path, 1: Model, 2: Type, 3: Mode, 4: Optim, 5: Finder F2
     lora_right_focus_idx: int = 0  # 0: iters, 1: batch, 2: lr, 3: layers, 4: rank, 5: alpha, 6: dropout, 7: seq_len, 8: grad_chk, 9: mask_pmt, 10: out, 11: add_to_queue
 
+    # Weights & Biases Experiment Tracking State
+    wandb_enabled: bool = True
+    wandb_project: str = "mlx-commander"
+
     def __post_init__(self) -> None:
         if self.output_dir:
             self.has_custom_output_dir = True
@@ -118,6 +125,36 @@ class CommanderState:
         if self.queue_manager is None:
             self.queue_manager = QueueManager(Path.cwd() / "mlx_runs")
         self.sync_dataset_to_lora()
+        self.update_deterministic_lora_name()
+
+    def get_wandb_status(self) -> Dict[str, Any]:
+        """Return W&B availability and authentication status."""
+        avail = is_wandb_available()
+        logged_in, entity = is_wandb_logged_in() if avail else (False, None)
+        return {
+            "available": avail,
+            "logged_in": logged_in,
+            "entity": entity,
+            "enabled": self.wandb_enabled and avail and logged_in,
+            "project": self.wandb_project,
+        }
+
+    def update_deterministic_lora_name(self) -> None:
+        """Update current form lora_config run name and adapter path deterministically if not custom."""
+        if not self.lora_config.is_custom_name:
+            next_idx = (len(self.queue_manager.runs) + 1) if self.queue_manager else 1
+            new_name = generate_deterministic_run_name(
+                index=next_idx,
+                fine_tune_type=self.lora_config.fine_tune_type,
+                rank=self.lora_config.lora_rank,
+                alpha=self.lora_config.lora_alpha,
+                learning_rate=self.lora_config.learning_rate,
+                batch_size=self.lora_config.batch_size,
+                iters=self.lora_config.iters,
+                model_name=self.lora_config.model,
+            )
+            self.lora_config.name = new_name
+            self.lora_config.adapter_path = f"adapters/{new_name}"
 
     def get_implied_epochs(self) -> Optional[float]:
         """Calculate implied epochs: (iters * batch_size) / train_records."""
@@ -162,9 +199,10 @@ class CommanderState:
         run.finished_at = None
         run.exit_code = None
         run.error_message = None
-        run.adapter_path = f"adapters/{run.id}"
+        run.wandb_project = self.wandb_project
         self.queue_manager.add_run(run)
         self.selected_queue_idx = len(self.queue_manager.runs) - 1
+        self.update_deterministic_lora_name()
         return run
 
     def load_queue_run_into_form(self, run_id: str) -> bool:
@@ -329,6 +367,14 @@ class CommanderState:
                 self.sync_dataset_to_lora()
             elif str(tab_val).lower().strip() in ("0", "dataset", "convert"):
                 self.active_tab = 0
+
+        # Weights & Biases Tracking
+        if "wandb_enabled" in config:
+            self.wandb_enabled = bool(config["wandb_enabled"])
+        if "wandb_project" in config and config["wandb_project"]:
+            self.wandb_project = str(config["wandb_project"]).strip()
+        if "wandb_project" in config:
+            self.lora_config.wandb_project = self.wandb_project
 
     def toggle_theme(self) -> str:
         """Toggle between Modern and Norton Commander color schemes."""

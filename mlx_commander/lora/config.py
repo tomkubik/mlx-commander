@@ -5,6 +5,7 @@ and CLI command generation for mlx_lm.lora.
 """
 
 import json
+import re
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -22,6 +23,82 @@ POPULAR_MLX_MODELS = [
 
 FINE_TUNE_TYPES = ["lora", "dora", "full"]
 OPTIMIZERS = ["adamw", "adam", "muon", "sgd", "adafactor"]
+
+
+def sanitize_model_slug(model_name: str) -> str:
+    """
+    Extract clean, filesystem-safe model slug from Hugging Face ID or local path.
+    e.g. 'mlx-community/Llama-3.2-3B-Instruct-4bit' -> 'Llama-3.2-3B-Instruct-4bit'
+    e.g. '/path/to/my_model/' -> 'my_model'
+    """
+    slug = model_name.strip().rstrip("/")
+    if "/" in slug:
+        slug = slug.split("/")[-1]
+    slug = re.sub(r'[^a-zA-Z0-9.\-_]+', '-', slug).strip('-')
+    return slug or "model"
+
+
+def format_learning_rate(lr: float) -> str:
+    """Format learning rate cleanly without decimal points for file names (e.g. 1e-5)."""
+    s = f"{lr:g}"
+    if "e" in s.lower():
+        base, exp = re.split(r"[eE]", s)
+        return f"{base}e{int(exp)}".replace(".", "p")
+    return s.replace(".", "p")
+
+
+def generate_deterministic_run_name(
+    config: Optional["LoraRunConfig"] = None,
+    index: int = 1,
+    implied_epochs: Optional[float] = None,
+    *,
+    fine_tune_type: Optional[str] = None,
+    rank: Optional[int] = None,
+    alpha: Optional[float] = None,
+    learning_rate: Optional[float] = None,
+    batch_size: Optional[int] = None,
+    iters: Optional[int] = None,
+    model_name: Optional[str] = None,
+) -> str:
+    """
+    Generate a deterministic, self-documenting run name and directory slug.
+    Structure:
+      {index:02d}_{method}_r{rank}_a{alpha}_lr{lr}_b{batch}_i{iters}_{model_slug}
+    Example:
+      01_lora_r16_a32_lr1e-5_b4_i1000_Llama-3.2-3B-Instruct-4bit
+    """
+    if config is not None:
+        method = config.fine_tune_type.lower()
+        lr_val = config.learning_rate
+        r_val = config.lora_rank
+        a_val = config.lora_alpha
+        b_val = config.batch_size
+        i_val = config.iters
+        m_name = config.model
+    else:
+        method = (fine_tune_type or "lora").lower()
+        lr_val = learning_rate if learning_rate is not None else 1e-5
+        r_val = rank if rank is not None else 8
+        a_val = alpha if alpha is not None else 16.0
+        b_val = batch_size if batch_size is not None else 4
+        i_val = iters if iters is not None else 1000
+        m_name = model_name or "model"
+
+    lr_str = format_learning_rate(lr_val)
+    model_slug = sanitize_model_slug(m_name)
+
+    parts = [f"{index:02d}", method]
+    if method in ("lora", "dora"):
+        parts.append(f"r{r_val}")
+        alpha_val = int(a_val) if isinstance(a_val, (int, float)) and float(a_val).is_integer() else a_val
+        parts.append(f"a{alpha_val}")
+    parts.append(f"lr{lr_str}")
+    parts.append(f"b{b_val}")
+    parts.append(f"i{i_val}")
+    if implied_epochs is not None and implied_epochs > 0:
+        parts.append(f"ep{implied_epochs:.1f}".replace(".", "p"))
+    parts.append(model_slug)
+    return "_".join(parts)
 
 
 @dataclass
@@ -53,7 +130,7 @@ class LoraRunConfig:
     seed: int = 0
     resume_adapter_file: Optional[str] = None
 
-    # Queue execution tracking
+    # Queue execution & tracking
     status: str = "queued"  # queued, running, completed, failed, cancelled
     created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
     started_at: Optional[str] = None
@@ -61,13 +138,23 @@ class LoraRunConfig:
     log_file: Optional[str] = None
     exit_code: Optional[int] = None
     error_message: Optional[str] = None
+    sequence_index: Optional[int] = None
+    is_custom_name: Optional[bool] = None
+    wandb_url: Optional[str] = None
+    wandb_project: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.name:
-            model_slug = self.model.split("/")[-1].replace("-Instruct", "").replace("-4bit", "")
-            self.name = f"{model_slug} (lr={self.learning_rate:g}, r={self.lora_rank})"
+            self.name = generate_deterministic_run_name(self, index=1)
+            if self.is_custom_name is None:
+                self.is_custom_name = False
+        else:
+            if self.is_custom_name is None:
+                self.is_custom_name = True
+        self.is_custom_name = bool(self.is_custom_name)
+
         if not self.adapter_path or self.adapter_path == "adapters":
-            self.adapter_path = f"adapters/{self.id}"
+            self.adapter_path = f"adapters/{self.name}"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

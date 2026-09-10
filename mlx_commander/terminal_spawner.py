@@ -153,6 +153,8 @@ def spawn_terminal_tui(
 def spawn_lora_queue_terminal(
     queue_dir: str,
     working_dir: Optional[str] = None,
+    wandb_project: Optional[str] = None,
+    enable_wandb: bool = True,
 ) -> bool:
     """
     Launch the LoRA queue runner in a dedicated detached macOS Terminal.app window.
@@ -168,6 +170,10 @@ def spawn_lora_queue_terminal(
     escaped_cwd = shlex.quote(cwd)
     python_exe = sys.executable
     cmd_parts = [shlex.quote(python_exe), "-m", "mlx_commander", "--run-queue", shlex.quote(str(queue_dir))]
+    if wandb_project:
+        cmd_parts.extend(["--wandb-project", shlex.quote(wandb_project)])
+    if not enable_wandb:
+        cmd_parts.append("--no-wandb")
     exec_cmd = " ".join(cmd_parts)
 
     script_lines = [

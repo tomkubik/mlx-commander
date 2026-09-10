@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from .queue import QueueManager
+from .tracking import WandbTracker
 
 
 def notify_macos(title: str, message: str) -> None:
@@ -23,8 +24,13 @@ def notify_macos(title: str, message: str) -> None:
         pass
 
 
-def execute_single_run(mgr: QueueManager, run_id: str) -> int:
-    """Execute a single LoRA run by ID, streaming output to console and log file."""
+def execute_single_run(
+    mgr: QueueManager,
+    run_id: str,
+    wandb_project: Optional[str] = None,
+    enable_wandb: bool = True,
+) -> int:
+    """Execute a single LoRA run by ID, streaming output to console, log file, and Weights & Biases."""
     r = mgr.get_run(run_id)
     if not r:
         return 1
@@ -32,12 +38,18 @@ def execute_single_run(mgr: QueueManager, run_id: str) -> int:
     cfg_file = mgr.configs_dir / f"{r.id}.yaml"
     log_file = mgr.logs_dir / f"{r.id}.log"
 
+    # Initialize Weights & Biases tracking if enabled and authenticated
+    tracker = WandbTracker(project=wandb_project or r.wandb_project, enabled=enable_wandb)
+    tracker.start_run(r)
+
     mgr.update_run_status(run_id, "running")
     print(f"\n[MLX Commander] Starting run: {r.name}")
     print(f"  Model:      {r.model}")
     print(f"  Data:       {r.data}")
     print(f"  Config:     {cfg_file}")
     print(f"  Output Log: {log_file}")
+    if tracker.run_url:
+        print(f"  W&B Run:    {tracker.run_url}")
     print("-" * 60)
 
     cmd = [sys.executable, "-m", "mlx_lm.lora", "--config", str(cfg_file)]
@@ -60,6 +72,7 @@ def execute_single_run(mgr: QueueManager, run_id: str) -> int:
                 sys.stdout.flush()
                 lf.write(line)
                 lf.flush()
+                tracker.log_line(line)
             proc.stdout.close()
             code = proc.wait()
         except FileNotFoundError:
@@ -76,6 +89,7 @@ def execute_single_run(mgr: QueueManager, run_id: str) -> int:
                     sys.stdout.flush()
                     lf.write(line)
                     lf.flush()
+                    tracker.log_line(line)
                 proc.stdout.close()
                 code = proc.wait()
             except Exception as e:
@@ -89,6 +103,12 @@ def execute_single_run(mgr: QueueManager, run_id: str) -> int:
             lf.write(err_str + "\n")
             code = 1
 
+    wandb_url = tracker.finish_run(exit_code=code)
+    if wandb_url:
+        r.wandb_url = wandb_url
+        mgr.save()
+        print(f"  [W&B] Run tracked at: {wandb_url}")
+
     if code == 0:
         mgr.update_run_status(run_id, "completed", exit_code=0)
         print(f"\n[OK] Run '{r.name}' completed successfully.")
@@ -99,7 +119,12 @@ def execute_single_run(mgr: QueueManager, run_id: str) -> int:
     return code
 
 
-def run_lora_queue(queue_dir: Optional[Path] = None, stop_on_failure: bool = False) -> int:
+def run_lora_queue(
+    queue_dir: Optional[Path] = None,
+    stop_on_failure: bool = False,
+    wandb_project: Optional[str] = None,
+    enable_wandb: bool = True,
+) -> int:
     """
     Run all queued runs sequentially.
     Safe for Apple Silicon: one model trains at a time, preventing memory thrashing.
@@ -122,7 +147,7 @@ def run_lora_queue(queue_dir: Optional[Path] = None, stop_on_failure: bool = Fal
 
     for idx, r in enumerate(pending, 1):
         print(f"\n>>> Processing Job [{idx}/{total_runs}]: {r.name}")
-        code = execute_single_run(mgr, r.id)
+        code = execute_single_run(mgr, r.id, wandb_project=wandb_project, enable_wandb=enable_wandb)
         if code == 0:
             completed_count += 1
         else:
