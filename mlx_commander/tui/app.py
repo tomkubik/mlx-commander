@@ -634,7 +634,7 @@ def _draw_mode2_dashboard(
 
     # Field 5: Mode (Train / Test)
     mode_focus = is_lora_left and state.lora_left_focus_idx == 5
-    mode_str = f"Train: {'[X]' if state.lora_config.train else '[ ]'}  Test: {'[X]' if state.lora_config.test else '[ ]'}"
+    mode_str = f"Train: {'Yes' if state.lora_config.train else 'No'}  Test: {'Yes' if state.lora_config.test else 'No'}"
     draw_field(stdscr, 9, 2, "Mode", mode_str, is_focused=mode_focus, val_width=22, right_edge=left_right_edge)
 
     # Field 6: Run Name
@@ -721,8 +721,8 @@ def _draw_mode2_dashboard(
         (5, "LoRA Dropout", f"{cfg.lora_dropout:g}", 8, False),
         (6, "Max Seq Length", str(cfg.max_seq_length), 10, False),
         (7, "Fine-Tuned Layers", str(cfg.num_layers), 8, False),
-        (8, "Grad Checkpoint", "[X] True" if cfg.grad_checkpoint else "[ ] False", 12, False),
-        (9, "Mask Prompt", "[X] True" if cfg.mask_prompt else "[ ] False", 12, False),
+        (8, "Grad Checkpoint", "True" if cfg.grad_checkpoint else "False", 10, False),
+        (9, "Mask Prompt", "True" if cfg.mask_prompt else "False", 10, False),
         (10, "Save Every", str(cfg.save_every), 8, False),
         (11, "Steps per Eval", str(cfg.steps_per_eval), 8, False),
         (12, "Adapter Path", cfg.adapter_path, max(14, right_w - 20), False),

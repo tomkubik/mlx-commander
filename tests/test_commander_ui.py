@@ -629,7 +629,7 @@ class TestCommanderUI(unittest.TestCase):
 
 
     def test_draw_field_path_truncation(self):
-        """Verify draw_field truncates paths from the front so the directory/filename is visible."""
+        """Verify draw_field truncates paths from the front so the directory/filename is visible without brackets."""
         from mlx_commander.tui.widgets import draw_field
 
         self.mock_win.reset_mock()
@@ -639,19 +639,21 @@ class TestCommanderUI(unittest.TestCase):
         box_str = None
         for call_args in self.mock_win.addstr.call_args_list:
             args = call_args[0]
-            if len(args) >= 3 and isinstance(args[2], str) and args[2].startswith("["):
+            if len(args) >= 3 and isinstance(args[2], str) and "mlx_dataset" in args[2]:
                 box_str = args[2]
 
         self.assertIsNotNone(box_str)
         self.assertIn("mlx_dataset", box_str)
         self.assertIn("…", box_str)
+        self.assertNotIn("[", box_str)
+        self.assertNotIn("]", box_str)
 
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
     @patch("mlx_commander.tui.app.init_colors")
     @patch("mlx_commander.tui.app.curses.curs_set")
     def test_splits_fields_right_brackets_visible(self, mock_curs, mock_colors, mock_has_colors):
-        """Verify Train, Valid, and Test fields retain their right-hand brackets on their respective rows."""
+        """Verify Train, Valid, and Test fields are right-aligned with no brackets."""
         for term_w in [130, 100]:
             self.mock_win.reset_mock()
             self.mock_win.getmaxyx.return_value = (30, term_w)
@@ -680,11 +682,17 @@ class TestCommanderUI(unittest.TestCase):
 
             self.assertIn("Dataset split:", train_row, f"Dataset split label missing on row {splits_y}: {train_row}")
             self.assertIn("Train:", train_row)
-            self.assertIn("[ 80%  ]", train_row, f"Train right bracket missing on width {term_w}: {train_row}")
+            self.assertIn("80%", train_row)
+            self.assertNotIn("[", train_row[train_row.index("Train:"):])
+            self.assertNotIn("]", train_row[train_row.index("Train:"):])
             self.assertIn("Valid:", valid_row)
-            self.assertIn("[ 10%  ]", valid_row, f"Valid right bracket missing on width {term_w}: {valid_row}")
+            self.assertIn("10%", valid_row)
+            self.assertNotIn("[", valid_row[valid_row.index("Valid:"):])
+            self.assertNotIn("]", valid_row[valid_row.index("Valid:"):])
             self.assertIn("Test:", test_row)
-            self.assertIn("[ 10%  ]", test_row, f"Test right bracket missing on width {term_w}: {test_row}")
+            self.assertIn("10%", test_row)
+            self.assertNotIn("[", test_row[test_row.index("Test:"):])
+            self.assertNotIn("]", test_row[test_row.index("Test:"):])
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
     @patch("mlx_commander.tui.app.init_colors")
@@ -738,7 +746,7 @@ class TestCommanderUI(unittest.TestCase):
                         if f"{split_name}:" in text:
                             lbl_x = x
                             lbl_attr = attr
-                        elif text.startswith("[") and "%" in text:
+                        elif "%" in text:
                             box_end_x = x + len(text) - 1
             splits_info[split_name] = {"x": lbl_x, "attr": lbl_attr, "box_end": box_end_x}
 
@@ -773,7 +781,7 @@ class TestCommanderUI(unittest.TestCase):
 
 
     def test_draw_field_right_edge_alignment(self):
-        """Verify draw_field aligns the closing bracket to right_edge while keeping label at x."""
+        """Verify draw_field aligns the field to right_edge while keeping label at x."""
         from mlx_commander.tui.widgets import draw_field
 
         self.mock_win.reset_mock()
@@ -788,14 +796,16 @@ class TestCommanderUI(unittest.TestCase):
                 y, x, text = args[0], args[1], args[2]
                 if y == 5 and "Prompt:" in text:
                     lbl_x = x
-                elif y == 5 and text.startswith("["):
+                elif y == 5 and "instruction" in text:
                     box_x = x
                     box_str = text
 
         self.assertEqual(lbl_x, 10, "Label should remain at x=10")
         self.assertIsNotNone(box_x)
         self.assertIsNotNone(box_str)
-        self.assertEqual(box_x + len(box_str) - 1, 75, "Field box closing bracket should end exactly at right_edge=75")
+        self.assertEqual(box_x + len(box_str) - 1, 75, "Field should end exactly at right_edge=75")
+        self.assertNotIn("[", box_str)
+        self.assertNotIn("]", box_str)
 
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
@@ -844,11 +854,11 @@ class TestCommanderUI(unittest.TestCase):
                 if len(args) >= 3 and isinstance(args[2], str):
                     y, x, text = args[0], args[1], args[2]
                     if y == row_y:
-                        if text.startswith("["):
+                        if ":" in text:
+                            lbl_x = x
+                        else:
                             box_x = x
                             box_text = text
-                        elif ":" in text:
-                            lbl_x = x
 
             self.assertEqual(lbl_x, left_w + 2, f"Mapping label row {row_y} should start at left_w + 2")
             self.assertIsNotNone(box_x, f"Mapping box row {row_y} not found")
@@ -868,7 +878,7 @@ class TestCommanderUI(unittest.TestCase):
                 y, x, text = args[0], args[1], args[2]
                 if "Output:" in text:
                     out_lbl_x = x
-                elif out_lbl_x is not None and text.startswith("[") and "mlx_dataset" in text:
+                elif out_lbl_x is not None and "mlx_dataset" in text:
                     out_box_x = x
                     out_box_text = text
 
@@ -908,6 +918,64 @@ class TestCommanderUI(unittest.TestCase):
         full_dump = " ".join(all_rendered_text)
         self.assertNotIn("datasets>=2.14.0", full_dump, "Must not auto-load requirements.txt or current directory")
         self.assertNotIn("pyarrow>=12.0.0", full_dump, "Must not auto-load requirements.txt or current directory")
+
+    @patch("mlx_commander.tui.widgets.safe_has_colors", return_value=True)
+    def test_draw_field_decluttered_typography(self, mock_has_colors):
+        """Verify draw_field renders values without [ ] brackets, using font color and focus highlight."""
+        from mlx_commander.tui.widgets import draw_field, COLOR_INPUT_NORMAL, COLOR_INPUT_FOCUSED, get_color
+
+        # 1. Unfocused field
+        self.mock_win.reset_mock()
+        draw_field(self.mock_win, 4, 2, "Batch Size", "4", is_focused=False, val_width=8, right_edge=50)
+
+        unfoc_call = None
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str) and "4" in args[2]:
+                unfoc_call = args
+
+        self.assertIsNotNone(unfoc_call)
+        y, x, text, attr = unfoc_call[0], unfoc_call[1], unfoc_call[2], unfoc_call[3]
+        self.assertEqual(text, " 4 ")
+        self.assertNotIn("[", text)
+        self.assertNotIn("]", text)
+        self.assertEqual(x + len(text) - 1, 50, "Right-edge alignment must be exact")
+        self.assertEqual(attr, get_color(COLOR_INPUT_NORMAL))
+
+        # 2. Focused field
+        self.mock_win.reset_mock()
+        draw_field(self.mock_win, 4, 2, "Iterations", "600", is_focused=True, val_width=10, right_edge=50)
+
+        foc_call = None
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str) and "600" in args[2]:
+                foc_call = args
+
+        self.assertIsNotNone(foc_call)
+        y, x, text, attr = foc_call[0], foc_call[1], foc_call[2], foc_call[3]
+        self.assertEqual(text, " 600 ")
+        self.assertNotIn("[", text)
+        self.assertNotIn("]", text)
+        self.assertEqual(x + len(text) - 1, 50, "Right-edge alignment must be exact")
+        self.assertEqual(attr, get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD)
+
+        # 3. Dropdown field
+        self.mock_win.reset_mock()
+        draw_field(self.mock_win, 4, 2, "Optimizer", "ADAMW", is_focused=False, has_dropdown=True, right_edge=50)
+
+        drop_call = None
+        for call_args in self.mock_win.addstr.call_args_list:
+            args = call_args[0]
+            if len(args) >= 3 and isinstance(args[2], str) and "ADAMW" in args[2]:
+                drop_call = args
+
+        self.assertIsNotNone(drop_call)
+        y, x, text, attr = drop_call[0], drop_call[1], drop_call[2], drop_call[3]
+        self.assertEqual(text, " ADAMW ▾ ")
+        self.assertNotIn("[", text)
+        self.assertNotIn("]", text)
+        self.assertEqual(x + len(text) - 1, 50)
 
 
 if __name__ == "__main__":

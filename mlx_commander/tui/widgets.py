@@ -632,22 +632,21 @@ def draw_field(
 
     disp_val = val_str or "<none>"
     arrow = " ▾" if has_dropdown else ""
-    max_len = val_width - len(arrow) - 2
+    max_len = max(4, val_width - len(arrow) - 2)
     if len(disp_val) > max_len:
         if "/" in disp_val or "\\" in disp_val:
             disp_val = "…" + disp_val[-(max_len - 1):]
         else:
             disp_val = disp_val[: max_len - 1] + "…"
 
-    pad = " " * max(0, max_len - len(disp_val))
-    box_str = f"[ {disp_val}{pad}{arrow} ]"
+    field_str = f" {disp_val}{arrow} "
 
     if field_x is not None:
         val_x = field_x
     elif right_edge is not None:
-        box_len = len(box_str)
+        field_len = len(field_str)
         min_val_x = x + len(lbl)
-        val_x = max(min_val_x, right_edge - box_len + 1)
+        val_x = max(min_val_x, right_edge - field_len + 1)
     else:
         val_x = x + len(lbl)
 
@@ -655,7 +654,7 @@ def draw_field(
         attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
     else:
         attr = get_color(COLOR_INPUT_NORMAL) if safe_has_colors() else 0
-    safe_addstr(win, y, val_x, box_str, attr)
+    safe_addstr(win, y, val_x, field_str, attr)
 
 
 
