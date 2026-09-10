@@ -1032,6 +1032,49 @@ class TestCommanderUI(unittest.TestCase):
         self.assertIn("[F9] Scheme", footer_text)
         self.assertIn("[F10] Exit", footer_text)
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_interstitial_hides_convert_dataset_button(self, mock_curs, mock_colors, mock_has_colors):
+        """Verify that when navigating to prompt-completion answer and displaying the interstitial,
+        Convert Dataset button is not visible anywhere."""
+        max_y, max_x = 30, 100
+        self.mock_win.getmaxyx.return_value = (max_y, max_x)
+        state = CommanderState()
+        state.target_format = MLXFormat.PROMPT_COMPLETION
+        from mlx_commander.tui.state import ActivePanel
+        state.active_panel = ActivePanel.RIGHT
+        # In prompt_completion: idx 0..3 are formats, idx 4 is prompt_col, idx 5 is completion_col (Answer)
+        state.right_focus_idx = 5
+
+        # Key sequence: Enter on completion_col (opens dialog), then 'q' in dialog, then 'q' in main loop
+        self.mock_win.getch.side_effect = [10, ord("q"), ord("q")]
+
+        # Directly verify what is rendered during show_column_picker_dialog
+        grid_during_dialog = [[" " for _ in range(max_x)] for _ in range(max_y)]
+        def fake_dialog_addstr(y, x, s, attr=0):
+            for i, ch in enumerate(s):
+                if 0 <= y < max_y and 0 <= x + i < max_x:
+                    grid_during_dialog[y][x + i] = ch
+        self.mock_win.addstr.side_effect = fake_dialog_addstr
+
+        # Simulate state where dashboard was drawn
+        from mlx_commander.tui.app import _draw_mode1_dashboard
+        from mlx_commander.tui.widgets import safe_addstr
+        left_w = max(34, max_x // 2)
+        right_w = max_x - left_w
+        _draw_mode1_dashboard(self.mock_win, state, max_y, max_x, left_w, right_w)
+        btn_y = 8 + len(state.get_mapping_fields_for_format()) + 3 + 1 + 1
+        safe_addstr(self.mock_win, btn_y, left_w + 2, " " * (right_w - 4), 0)
+
+        self.mock_win.getch.side_effect = [ord("q")]
+        show_column_picker_dialog(self.mock_win, "Select Column for 'Completion / Answer'", ["id", "output"], allow_none=True)
+
+        full_screen = "\n".join("".join(row) for row in grid_during_dialog)
+        self.assertNotIn("Convert Dataset", full_screen)
+        # Verify footer row does not contain Convert
+        self.assertNotIn("Convert", "".join(grid_during_dialog[max_y - 1]))
+
 
 if __name__ == "__main__":
     unittest.main()

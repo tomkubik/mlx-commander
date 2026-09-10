@@ -704,9 +704,9 @@ def show_column_picker_dialog(
     initial_sel_idx = sel_idx
 
     max_y, max_x = stdscr.getmaxyx()
-    h = min(len(options) + 7, max_y - 4, 18)
+    h = min(max_y - 4, max(len(options) + 7, 14), 22)
     longest_col = max((len(c) for c in options), default=10)
-    w = min(max(longest_col + 16, 54), max_x - 6)
+    w = min(max_x - 4, max(longest_col + 24, 76))
     start_y = max(1, (max_y - h) // 2)
     start_x = max(1, (max_x - w) // 2)
 
@@ -714,8 +714,17 @@ def show_column_picker_dialog(
     safe_curs_set(0)
 
     while True:
+        # Update bottom hotkey bar for modal dialog so Convert is not visible at bottom
+        safe_addstr(stdscr, max_y - 1, 0, " " * max_x, get_color(COLOR_BANNER))
+        footer_keys = "[Space] Toggle/Order  [Enter] Confirm Selection  [Esc/q] Cancel"
+        safe_addstr(stdscr, max_y - 1, 2, footer_keys, get_color(COLOR_BANNER))
+
+        # Draw box and clear all internal rows
         safe_addstr(stdscr, start_y, start_x, "╔" + "═" * (w - 2) + "╗", get_color(2) | curses.A_BOLD)
         safe_addstr(stdscr, start_y, start_x + 2, f" {title} ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
+        for r in range(1, h - 1):
+            safe_addstr(stdscr, start_y + r, start_x, "║" + " " * (w - 2) + "║", get_color(2))
+        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(2) | curses.A_BOLD)
 
         visible_rows = h - 5
         if sel_idx < scroll_offset:
@@ -726,7 +735,6 @@ def show_column_picker_dialog(
         for r in range(visible_rows):
             row_y = start_y + 1 + r
             opt_idx = scroll_offset + r
-            safe_addstr(stdscr, row_y, start_x, "║" + " " * (w - 2) + "║", get_color(2))
             if opt_idx < len(options):
                 opt_name = options[opt_idx]
                 is_focused = (opt_idx == sel_idx)
@@ -753,8 +761,10 @@ def show_column_picker_dialog(
 
                 safe_addstr(stdscr, row_y, start_x + 1, line_text, attr)
 
+        # Divider above summary & footer
+        safe_addstr(stdscr, start_y + h - 4, start_x, "╟" + "─" * (w - 2) + "╢", get_color(2))
+
         # Concatenation selection summary
-        safe_addstr(stdscr, start_y + h - 3, start_x, "║" + " " * (w - 2) + "║", get_color(2))
         safe_addstr(stdscr, start_y + h - 3, start_x + 2, "Selection: ", (get_color(4) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
         if selected_cols:
             summary_txt = " + ".join(selected_cols)
@@ -762,10 +772,8 @@ def show_column_picker_dialog(
         else:
             safe_addstr(stdscr, start_y + h - 3, start_x + 13, "<none>", (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
 
-        # Footer
-        safe_addstr(stdscr, start_y + h - 2, start_x, "║" + " " * (w - 2) + "║", get_color(2))
+        # Footer inside dialog
         safe_addstr(stdscr, start_y + h - 2, start_x + 2, "[Space] Toggle/Order  [Enter] OK  [Esc] Cancel"[: w - 4], (get_color(4) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
-        safe_addstr(stdscr, start_y + h - 1, start_x, "╚" + "═" * (w - 2) + "╝", get_color(2) | curses.A_BOLD)
         stdscr.refresh()
 
         k = stdscr.getch()

@@ -1034,6 +1034,9 @@ def _handle_mode1_input(
             elif 4 <= idx <= 3 + len(mapping_fields):
                 f_info = mapping_fields[idx - 4]
                 cols = state.loaded_dataset.columns if state.loaded_dataset else []
+                btn_y = 8 + len(mapping_fields) + 3 + 1 + 1
+                safe_addstr(stdscr, btn_y, left_w + 2, " " * (right_w - 4), get_color(COLOR_PANEL_BG))
+                stdscr.refresh()
                 chosen = show_column_picker_dialog(
                     stdscr,
                     f"Select Column for '{f_info['label']}'",
