@@ -978,6 +978,60 @@ class TestCommanderUI(unittest.TestCase):
         self.assertNotIn("]", text)
         self.assertEqual(x + len(text) - 1, 50)
 
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_top_menu_no_fn_labels_and_bottom_bar_has_all_fn_labels(self, mock_curs, mock_colors, mock_has_colors):
+        self.mock_win.getmaxyx.return_value = (30, 100)
+        self.mock_win.getch.side_effect = [ord("q")]
+        state = CommanderState()
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        # Inspect row 0 (top menu)
+        row0_calls = [
+            c[0][2] for c in self.mock_win.addstr.call_args_list
+            if len(c[0]) >= 3 and c[0][0] == 0 and isinstance(c[0][2], str)
+        ]
+        row0_text = " ".join(row0_calls)
+        self.assertNotIn("F1: Help", row0_text)
+        self.assertNotIn("F4: Mode", row0_text)
+        self.assertNotIn("F9: Scheme", row0_text)
+        self.assertNotIn("F10: Exit", row0_text)
+        self.assertNotIn("(F4)", row0_text)
+        self.assertIn("1: Dataset Converter", row0_text)
+        self.assertIn("2: Fine-Tuning Single Run", row0_text)
+
+        # Inspect row 29 (bottom footer, max_y - 1)
+        footer_calls = [
+            c[0][2] for c in self.mock_win.addstr.call_args_list
+            if len(c[0]) >= 3 and c[0][0] == 29 and isinstance(c[0][2], str)
+        ]
+        footer_text = " ".join(footer_calls)
+        self.assertIn("[F1] Help", footer_text)
+        self.assertIn("[F4] Mode", footer_text)
+        self.assertIn("[F9] Scheme", footer_text)
+        self.assertIn("[F10] Exit", footer_text)
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=True)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_footer_contains_all_fn_keys_in_mode2_narrow(self, mock_curs, mock_colors, mock_has_colors):
+        self.mock_win.getmaxyx.return_value = (30, 80)
+        self.mock_win.getch.side_effect = [ord("q")]
+        state = CommanderState()
+        state.active_tab = 1
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        footer_calls = [
+            c[0][2] for c in self.mock_win.addstr.call_args_list
+            if len(c[0]) >= 3 and c[0][0] == 29 and isinstance(c[0][2], str)
+        ]
+        footer_text = " ".join(footer_calls)
+        self.assertIn("[F1] Help", footer_text)
+        self.assertIn("[F4] Mode", footer_text)
+        self.assertIn("[F9] Scheme", footer_text)
+        self.assertIn("[F10] Exit", footer_text)
+
 
 if __name__ == "__main__":
     unittest.main()

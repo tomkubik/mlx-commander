@@ -1382,7 +1382,7 @@ def run_commander_tui(
         x_m1 = 2 + len(title_prefix)
 
         mode1_title = "[ 1: Dataset Converter ]"
-        mode2_title = "[ 2: Fine-Tuning Single Run (F4) ]"
+        mode2_title = "[ 2: Fine-Tuning Single Run ]"
         if state.active_tab == 0:
             m1_attr = hdr_attr | curses.A_STANDOUT | curses.A_BOLD
             m2_attr = hdr_attr | curses.A_DIM
@@ -1393,9 +1393,6 @@ def run_commander_tui(
         safe_addstr(stdscr, 0, x_m1, mode1_title, m1_attr)
         x_m2 = x_m1 + len(mode1_title) + 2
         safe_addstr(stdscr, 0, x_m2, mode2_title, m2_attr)
-
-        hint_str = "[F1: Help | F4: Mode | F9: Scheme | F10: Exit]" if max_x >= 100 else "[F4: Mode | F10: Exit]"
-        safe_addstr(stdscr, 0, max(2, max_x - len(hint_str) - 2), hint_str, hdr_attr)
 
         # ----------------------------------------------------
         # 2. Dimensions & Coordinates (3-Tier Responsive Layout)
@@ -1418,7 +1415,7 @@ def run_commander_tui(
                     ("1", "Help"),
                     ("2", "Open"),
                     ("3", "Output"),
-                    ("4", "LoRA"),
+                    ("4", "Mode"),
                     ("5", "Convert"),
                     ("F9", "Scheme"),
                     ("10", "Exit"),
@@ -1426,44 +1423,81 @@ def run_commander_tui(
             else:
                 fn_items = [
                     ("1", "Help"),
-                    ("2", "Data"),
-                    ("4", "Convert"),
+                    ("4", "Mode"),
                     ("5", "RunQueue"),
                     ("6", "AddRun"),
                     ("F9", "Scheme"),
                     ("10", "Exit"),
                 ]
             safe_addstr(stdscr, footer_y, 0, " " * max_x, get_color(COLOR_PANEL_BG))
+            total_fn_width = sum(len(num_str) + len(lbl_str) + 3 for num_str, lbl_str in fn_items)
+
             cur_x = 0
-            if max_x >= 100 and state.status_message:
+            avail_status = max_x - total_fn_width - 2
+            if max_x >= 90 and state.status_message and avail_status >= 10:
                 prefix = "[OK] " if not state.status_is_error else "[ERR] "
-                short_status = f"{prefix}{state.status_message}"[:max_x - 65]
+                short_status = f"{prefix}{state.status_message}"[:avail_status]
                 stat_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
                 safe_addstr(stdscr, footer_y, 0, short_status, stat_attr)
-                cur_x = len(short_status) + 2
+                cur_x = len(short_status) + 1
 
+            start_fn_x = max(cur_x, max_x - total_fn_width)
+            if start_fn_x + total_fn_width > max_x:
+                start_fn_x = max(0, max_x - total_fn_width)
+
+            pos_x = start_fn_x
             for num_str, lbl_str in fn_items:
-                if cur_x + len(num_str) + len(lbl_str) + 2 >= max_x:
+                if pos_x + len(num_str) + len(lbl_str) + 2 >= max_x:
                     break
                 num_attr = (get_color(COLOR_FN_NUMBER) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
                 lbl_attr = get_color(COLOR_FN_LABEL) if curses.has_colors() else curses.A_STANDOUT
-                safe_addstr(stdscr, footer_y, cur_x, f" {num_str} ", num_attr)
-                cur_x += len(num_str) + 2
-                safe_addstr(stdscr, footer_y, cur_x, f"{lbl_str} ", lbl_attr)
-                cur_x += len(lbl_str) + 1
+                safe_addstr(stdscr, footer_y, pos_x, f" {num_str} ", num_attr)
+                pos_x += len(num_str) + 2
+                safe_addstr(stdscr, footer_y, pos_x, f"{lbl_str} ", lbl_attr)
+                pos_x += len(lbl_str) + 1
         else:
             safe_addstr(stdscr, footer_y, 0, " " * max_x, hdr_attr)
-            if state.active_tab == 0:
-                bar_shortcuts = "[Tab] Switch  [F4] LoRA Mode  [Enter] Select  [F2] Open  [F3] Output  [F5] Convert  [F9] Scheme" if max_x >= 102 else "[Tab] Switch  [F4] LoRA  [F5] Convert  [F9] Scheme"
-            else:
-                bar_shortcuts = "[Tab] Switch Pane  [F4] Dataset Mode  [F5] Run Queue  [F6] Add Run  [c] Clone  [d] Del  [F9] Scheme" if max_x >= 102 else "[Tab] Pane  [F4] Convert  [F5] Run  [F6] Add  [c] Clone"
-            shortcuts_x = max(10, max_x - len(bar_shortcuts) - 2)
-            avail_status = max(10, shortcuts_x - 4)
+            unbold_attr = get_color(COLOR_BANNER) if curses.has_colors() else curses.A_NORMAL
 
-            status_prefix = "[OK] " if not state.status_is_error else "[ERR] "
-            status_text = f"{status_prefix}{state.status_message}"[:avail_status]
-            safe_addstr(stdscr, footer_y, 2, status_text, hdr_attr | curses.A_BOLD)
-            safe_addstr(stdscr, footer_y, shortcuts_x, bar_shortcuts, hdr_attr)
+            if state.active_tab == 0:
+                if max_x >= 120:
+                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [F1] Help  [F2] Open  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                elif max_x >= 100:
+                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F2] Open  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                elif max_x >= 80:
+                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                elif max_x >= 65:
+                    bar_shortcuts = "[F1] Help  [F4] Mode  [F5] Convert  [F9] Scheme  [F10] Exit"
+                elif max_x >= 57:
+                    bar_shortcuts = "[F1] Help [F4] Mode [F5] Convert [F9] Scheme [F10] Exit"
+                else:
+                    bar_shortcuts = "F1:Help F4:Mode F9:Scheme F10:Exit"
+            else:
+                if max_x >= 120:
+                    bar_shortcuts = "[Tab] Switch  [Enter] Select  [c] Clone  [d] Del  [F1] Help  [F4] Mode  [F5] Run  [F6] Add  [F9] Scheme  [F10] Exit"
+                elif max_x >= 102:
+                    bar_shortcuts = "[Tab] Switch  [c] Clone  [F1] Help  [F4] Mode  [F5] Run  [F6] Add  [F9] Scheme  [F10] Exit"
+                elif max_x >= 85:
+                    bar_shortcuts = "[Tab] Switch  [F1] Help  [F4] Mode  [F5] Run  [F6] Add  [F9] Scheme  [F10] Exit"
+                elif max_x >= 76:
+                    bar_shortcuts = "[Tab] Switch [F1] Help [F4] Mode [F5] Run [F6] Add [F9] Scheme [F10] Exit"
+                elif max_x >= 60:
+                    bar_shortcuts = "[F1] Help  [F4] Mode  [F5] Run  [F9] Scheme  [F10] Exit"
+                elif max_x >= 53:
+                    bar_shortcuts = "[F1] Help [F4] Mode [F5] Run [F9] Scheme [F10] Exit"
+                else:
+                    bar_shortcuts = "F1:Help F4:Mode F9:Scheme F10:Exit"
+
+            shortcuts_len = len(bar_shortcuts)
+            shortcuts_x = max(1, max_x - shortcuts_len - 1)
+            avail_status = max(0, shortcuts_x - 3)
+
+            if avail_status >= 6 and state.status_message:
+                status_prefix = "[OK] " if not state.status_is_error else "[ERR] "
+                status_text = f"{status_prefix}{state.status_message}"[:avail_status]
+                safe_addstr(stdscr, footer_y, 2, status_text, hdr_attr | curses.A_BOLD)
+
+            safe_addstr(stdscr, footer_y, shortcuts_x, bar_shortcuts, unbold_attr)
 
         stdscr.refresh()
 

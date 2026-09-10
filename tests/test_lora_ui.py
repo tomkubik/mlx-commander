@@ -40,7 +40,9 @@ class TestLoraUI(unittest.TestCase):
         self.assertIn("Fine-Tuning Single Run", state.status_message)
         calls = self.mock_win.addstr.call_args_list
         all_text = " ".join(c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str))
-        self.assertIn("2: Fine-Tuning Single Run (F4)", all_text)
+        self.assertIn("2: Fine-Tuning Single Run", all_text)
+        self.assertNotIn("2: Fine-Tuning Single Run (F4)", all_text)
+        self.assertIn("[F4] Mode", all_text)
 
     @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
     @patch("mlx_commander.tui.app.init_colors")
