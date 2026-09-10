@@ -68,6 +68,7 @@ from mlx_commander.tui.widgets import (
     safe_addstr,
     show_choice_dialog,
     show_column_picker_dialog,
+    show_dataset_picker_dialog,
     show_error_dialog,
     show_help_dialog,
     show_message_dialog,
@@ -614,49 +615,44 @@ def _draw_mode2_dashboard(
 
     # Field 0: Base Model
     m_focus = is_lora_left and state.lora_left_focus_idx == 0
-    model_disp = state.lora_config.model
+    model_disp = state.lora_config.model or "None"
     if len(model_disp) > left_w - 18:
         model_disp = "…" + model_disp[-(left_w - 19):]
     draw_field(stdscr, 2, 2, "Base Model", model_disp, is_focused=m_focus, val_width=max(14, left_w - 18), has_dropdown=True, right_edge=left_right_edge)
 
     # Field 1: Dataset Directory
     d_focus = is_lora_left and state.lora_left_focus_idx == 1
-    data_disp = state.lora_config.data or "<no dataset path>"
+    data_disp = state.lora_config.data or "None"
     if len(data_disp) > left_w - 18:
         data_disp = "…" + data_disp[-(left_w - 19):]
     draw_field(stdscr, 4, 2, "Dataset", data_disp, is_focused=d_focus, val_width=max(14, left_w - 18), has_dropdown=True, right_edge=left_right_edge)
 
-    # Field 2: Finder button (Right aligned)
-    f2_focus = is_lora_left and state.lora_left_focus_idx == 2
-    f2_btn_text = "Finder (F2)"
-    draw_button(stdscr, 5, left_right_edge - len(f2_btn_text) - 3, f2_btn_text, is_focused=f2_focus)
+    # Field 2: Technique
+    type_focus = is_lora_left and state.lora_left_focus_idx == 2
+    draw_field(stdscr, 6, 2, "Method", state.lora_config.fine_tune_type.upper(), is_focused=type_focus, val_width=10, has_dropdown=True, right_edge=left_right_edge)
 
-    # Field 3: Technique
-    type_focus = is_lora_left and state.lora_left_focus_idx == 3
-    draw_field(stdscr, 7, 2, "Method", state.lora_config.fine_tune_type.upper(), is_focused=type_focus, val_width=10, has_dropdown=True, right_edge=left_right_edge)
+    # Field 3: Optimizer
+    opt_focus = is_lora_left and state.lora_left_focus_idx == 3
+    draw_field(stdscr, 7, 2, "Optimizer", state.lora_config.optimizer, is_focused=opt_focus, val_width=12, has_dropdown=True, right_edge=left_right_edge)
 
-    # Field 4: Optimizer
-    opt_focus = is_lora_left and state.lora_left_focus_idx == 4
-    draw_field(stdscr, 8, 2, "Optimizer", state.lora_config.optimizer, is_focused=opt_focus, val_width=12, has_dropdown=True, right_edge=left_right_edge)
-
-    # Field 5: Mode (Train / Test)
-    mode_focus = is_lora_left and state.lora_left_focus_idx == 5
+    # Field 4: Mode (Train / Test)
+    mode_focus = is_lora_left and state.lora_left_focus_idx == 4
     mode_str = f"Train: {'Yes' if state.lora_config.train else 'No'}  Test: {'Yes' if state.lora_config.test else 'No'}"
-    draw_field(stdscr, 9, 2, "Mode", mode_str, is_focused=mode_focus, val_width=22, right_edge=left_right_edge)
+    draw_field(stdscr, 8, 2, "Mode", mode_str, is_focused=mode_focus, val_width=22, right_edge=left_right_edge)
 
-    # Field 6: Run Name
-    name_focus = is_lora_left and state.lora_left_focus_idx == 6
+    # Field 5: Run Name
+    name_focus = is_lora_left and state.lora_left_focus_idx == 5
     name_disp = state.lora_config.name or "<auto>"
     if len(name_disp) > left_w - 18:
         name_disp = "…" + name_disp[-(left_w - 19):]
-    draw_field(stdscr, 10, 2, "Run Name", name_disp, is_focused=name_focus, val_width=max(14, left_w - 18), right_edge=left_right_edge)
+    draw_field(stdscr, 9, 2, "Run Name", name_disp, is_focused=name_focus, val_width=max(14, left_w - 18), right_edge=left_right_edge)
 
     # Helpful workflow tips in lower section of Left Panel when panel_h is tall
     if panel_h >= 16:
         div_text = " Workflow Shortcuts "
         pad_len = max(2, (left_w - 4 - len(div_text)) // 2)
         div_line = "─" * pad_len + div_text + "─" * pad_len
-        safe_addstr(stdscr, 12, 2, div_line[:left_w - 4], (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+        safe_addstr(stdscr, 11, 2, div_line[:left_w - 4], (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
 
         tips = [
             ("F2", "Browse Finder for Model/Data"),
@@ -668,7 +664,7 @@ def _draw_mode2_dashboard(
         key_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
         tip_attr = (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM
         for i, (k, desc) in enumerate(tips):
-            tip_y = 13 + i
+            tip_y = 12 + i
             if tip_y < panel_h:
                 safe_addstr(stdscr, tip_y, 3, f"• [{k}] ", key_attr)
                 safe_addstr(stdscr, tip_y, 3 + len(f"• [{k}] "), desc[:left_w - 4 - len(f"• [{k}] ")], tip_attr)
@@ -1138,7 +1134,7 @@ def _handle_mode2_input(
         if key in (curses.KEY_UP, ord("k")):
             state.lora_left_focus_idx = max(0, state.lora_left_focus_idx - 1)
         elif key in (curses.KEY_DOWN, ord("j")):
-            state.lora_left_focus_idx = min(6, state.lora_left_focus_idx + 1)
+            state.lora_left_focus_idx = min(5, state.lora_left_focus_idx + 1)
         elif key in (curses.KEY_RIGHT, ord("l")):
             state.lora_active_panel = "right"
         elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
@@ -1151,50 +1147,24 @@ def _handle_mode2_input(
                     state.update_deterministic_lora_name()
                     state.status_message = f"Base model set to: {state.lora_config.model}"
                     state.status_is_error = False
-            elif idx == 1:  # Dataset path
-                val = show_text_edit_dialog(
-                    stdscr,
-                    "Dataset Path",
-                    "Enter directory containing train.jsonl / valid.jsonl:",
-                    default_val=state.lora_config.data,
-                )
-                if val:
-                    state.lora_config.data = val.strip()
-            elif idx == 2:  # Finder button
-                curses.def_prog_mode()
-                curses.endwin()
-                if not state.lora_config.model:
-                    from mlx_commander.gui_picker import pick_model_gui
-                    chosen = pick_model_gui("Select Local Base Model (Folder or File)", default_dir=os.getcwd())
-                    curses.reset_prog_mode()
-                    stdscr.refresh()
-                    if chosen:
-                        state.lora_config.model = chosen.strip()
-                        state.inspect_current_model()
-                        state.update_deterministic_lora_name()
-                        state.status_message = f"Base model set to: {state.lora_config.model}"
-                        state.status_is_error = False
-                else:
-                    from mlx_commander.gui_picker import pick_folder_gui
-                    chosen = pick_folder_gui("Select Dataset Folder", default_dir=state.lora_config.data or os.getcwd())
-                    curses.reset_prog_mode()
-                    stdscr.refresh()
-                    if chosen:
-                        state.lora_config.data = chosen.strip()
-                        state.status_message = f"Dataset folder set to: {chosen}"
-                        state.status_is_error = False
-            elif idx == 3:  # Method
+            elif idx == 1:  # Dataset
+                chosen = show_dataset_picker_dialog(stdscr, state.lora_config.data)
+                if chosen:
+                    state.lora_config.data = chosen.strip()
+                    state.status_message = f"Dataset folder set to: {chosen.strip()}"
+                    state.status_is_error = False
+            elif idx == 2:  # Method
                 chosen = show_choice_dialog(stdscr, "Fine-Tune Method", "Select technique:", FINE_TUNE_TYPES, state.lora_config.fine_tune_type)
                 if chosen:
                     state.lora_config.fine_tune_type = chosen
                     state.update_deterministic_lora_name()
-            elif idx == 4:  # Optimizer
+            elif idx == 3:  # Optimizer
                 chosen = show_choice_dialog(stdscr, "Optimizer", "Select training optimizer:", OPTIMIZERS, state.lora_config.optimizer)
                 if chosen:
                     state.lora_config.optimizer = chosen
-            elif idx == 5:  # Mode (toggle train/test)
+            elif idx == 4:  # Mode (toggle train/test)
                 state.lora_config.train = not state.lora_config.train
-            elif idx == 6:  # Run Name
+            elif idx == 5:  # Run Name
                 val = show_text_edit_dialog(stdscr, "Run Name", "Enter descriptive label for this run:", default_val=state.lora_config.name)
                 if val:
                     state.lora_config.name = val.strip()

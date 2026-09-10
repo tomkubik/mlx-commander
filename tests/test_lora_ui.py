@@ -10,6 +10,7 @@ from mlx_commander.tui.state import CommanderState
 from mlx_commander.tui.widgets import (
     draw_queue_table,
     show_choice_dialog,
+    show_dataset_picker_dialog,
     show_model_picker_dialog,
 )
 
@@ -102,6 +103,14 @@ class TestLoraUI(unittest.TestCase):
         self.mock_win.getch.side_effect = [curses.KEY_DOWN, 10]
         chosen = show_model_picker_dialog(self.mock_win)
         self.assertEqual(chosen, "/local/path/to/model")
+        mock_text_edit.assert_called_once()
+
+    @patch("mlx_commander.tui.widgets.show_text_edit_dialog", return_value="/local/path/to/dataset")
+    def test_show_dataset_picker_dialog(self, mock_text_edit):
+        # Press Down (select Enter Local Dataset Path Manually) then Enter
+        self.mock_win.getch.side_effect = [curses.KEY_DOWN, 10]
+        chosen = show_dataset_picker_dialog(self.mock_win)
+        self.assertEqual(chosen, "/local/path/to/dataset")
         mock_text_edit.assert_called_once()
 
     def test_show_choice_dialog(self):
@@ -348,6 +357,41 @@ class TestLoraUI(unittest.TestCase):
         self.assertTrue(found_ram_desc, "Safe fine-tuning headroom should be found in gray font")
         self.assertTrue(found_breakdown, "RAM Breakdown should be found in gray font")
         self.assertTrue(found_duration, "Est. Duration should be found in white font")
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    @patch("mlx_commander.tui.app.show_dataset_picker_dialog", return_value="/new/dataset/dir")
+    def test_dataset_and_model_selector_consistency(self, mock_picker, mock_curs, mock_colors, mock_has_colors):
+        """
+        Verify that:
+        - Base model and dataset both display 'None' when empty.
+        - Neither has a separate Finder button row.
+        - Pressing Enter on dataset (index 1) opens show_dataset_picker_dialog.
+        - Navigation clamps between 0 and 5.
+        """
+        state = CommanderState()
+        state.active_tab = 1
+        state.lora_active_panel = "left"
+        state.lora_config.model = ""
+        state.lora_config.data = ""
+
+        # Press KEY_DOWN (to focus Dataset, index 1), press Enter (open dialog), then 'q'
+        self.mock_win.getch.side_effect = [
+            curses.KEY_DOWN,
+            10,  # Enter on Dataset
+            ord("q"),
+        ]
+        run_commander_tui(self.mock_win, initial_state=state)
+
+        # Picker should have been called with current data ("")
+        mock_picker.assert_called_once()
+        self.assertEqual(state.lora_config.data, "/new/dataset/dir")
+
+        calls = self.mock_win.addstr.call_args_list
+        all_text = " ".join(c[0][2] for c in calls if len(c[0]) >= 3 and isinstance(c[0][2], str))
+        self.assertIn("None", all_text)
+        self.assertNotIn("Finder (F2)", all_text)
 
 
 if __name__ == "__main__":

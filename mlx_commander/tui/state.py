@@ -101,7 +101,7 @@ class CommanderState:
     queue_manager: Optional[QueueManager] = None
     selected_queue_idx: int = 0
     lora_active_panel: str = "left"  # "left", "right", "queue"
-    lora_left_focus_idx: int = 0   # 0: Model, 1: Dataset, 2: Finder F2, 3: Method, 4: Optim, 5: Mode, 6: Run Name
+    lora_left_focus_idx: int = 0   # 0: Model, 1: Dataset, 2: Method, 3: Optim, 4: Mode, 5: Run Name
     lora_right_focus_idx: int = 0  # 0 to 13 (sequential single column)
     lora_right_scroll_offset: int = 0
     lora_queue_scroll_offset: int = 0
