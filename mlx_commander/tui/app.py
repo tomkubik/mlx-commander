@@ -573,18 +573,27 @@ def _draw_mode2_dashboard(
     right_w: int,
 ) -> None:
     """Draw Mode 2: Apple MLX LoRA Fine-Tuning Dashboard & Queue."""
-    panel_h = max(13, min(15, max_y - 12))
+    # Height allocations across 3 tiers
+    if max_y >= 36:
+        panel_h = 16
+        vis_h = 7
+    elif max_y >= 28:
+        panel_h = max(11, min(15, (max_y - 10) * 5 // 9))
+        vis_h = 6
+    else:
+        panel_h = max(9, min(13, max_y // 3))
+        vis_h = 5
+
     vis_y = panel_h + 1
-    remaining_y = max(6, max_y - 1 - (panel_h + 1))
-    vis_h = max(5, min(9, remaining_y // 2))
-    preview_y = vis_y + vis_h
-    preview_h = max(4, max_y - 1 - preview_y)
+    queue_y = vis_y + vis_h
+    queue_h = max(4, max_y - 1 - queue_y)
 
     is_lora_left = (state.lora_active_panel == "left")
     is_lora_right = (state.lora_active_panel == "right")
     is_lora_queue = (state.lora_active_panel == "queue")
 
-    # 1. Left Panel: Model & Dataset Selector
+    # 1. Left Panel: Model & Dataset Selector (All input fields right-aligned to left_right_edge)
+    left_right_edge = left_w - 3
     draw_box_panel(
         stdscr,
         1,
@@ -599,42 +608,43 @@ def _draw_mode2_dashboard(
     # Field 0: Base Model
     m_focus = is_lora_left and state.lora_left_focus_idx == 0
     model_disp = state.lora_config.model
-    if len(model_disp) > left_w - 14:
-        model_disp = "…" + model_disp[-(left_w - 15):]
-    draw_field(stdscr, 2, 2, "Base Model", model_disp, is_focused=m_focus, val_width=left_w - 16, has_dropdown=True)
+    if len(model_disp) > left_w - 18:
+        model_disp = "…" + model_disp[-(left_w - 19):]
+    draw_field(stdscr, 2, 2, "Base Model", model_disp, is_focused=m_focus, val_width=max(14, left_w - 18), has_dropdown=True, right_edge=left_right_edge)
 
     # Field 1: Dataset Directory
     d_focus = is_lora_left and state.lora_left_focus_idx == 1
     data_disp = state.lora_config.data or "<no dataset path>"
-    if len(data_disp) > left_w - 14:
-        data_disp = "…" + data_disp[-(left_w - 15):]
-    draw_field(stdscr, 4, 2, "Dataset", data_disp, is_focused=d_focus, val_width=left_w - 16, has_dropdown=True)
+    if len(data_disp) > left_w - 18:
+        data_disp = "…" + data_disp[-(left_w - 19):]
+    draw_field(stdscr, 4, 2, "Dataset", data_disp, is_focused=d_focus, val_width=max(14, left_w - 18), has_dropdown=True, right_edge=left_right_edge)
 
-    # Field 2: Finder button
+    # Field 2: Finder button (Right aligned)
     f2_focus = is_lora_left and state.lora_left_focus_idx == 2
-    draw_button(stdscr, 5, 2, "Finder (F2)", is_focused=f2_focus)
+    f2_btn_text = "Finder (F2)"
+    draw_button(stdscr, 5, left_right_edge - len(f2_btn_text) - 3, f2_btn_text, is_focused=f2_focus)
 
     # Field 3: Technique
     type_focus = is_lora_left and state.lora_left_focus_idx == 3
-    draw_field(stdscr, 7, 2, "Method", state.lora_config.fine_tune_type.upper(), is_focused=type_focus, val_width=10, has_dropdown=True)
+    draw_field(stdscr, 7, 2, "Method", state.lora_config.fine_tune_type.upper(), is_focused=type_focus, val_width=10, has_dropdown=True, right_edge=left_right_edge)
 
     # Field 4: Optimizer
     opt_focus = is_lora_left and state.lora_left_focus_idx == 4
-    draw_field(stdscr, 8, 2, "Optimizer", state.lora_config.optimizer, is_focused=opt_focus, val_width=12, has_dropdown=True)
+    draw_field(stdscr, 8, 2, "Optimizer", state.lora_config.optimizer, is_focused=opt_focus, val_width=12, has_dropdown=True, right_edge=left_right_edge)
 
     # Field 5: Mode (Train / Test)
     mode_focus = is_lora_left and state.lora_left_focus_idx == 5
     mode_str = f"Train: {'[X]' if state.lora_config.train else '[ ]'}  Test: {'[X]' if state.lora_config.test else '[ ]'}"
-    draw_field(stdscr, 9, 2, "Mode", mode_str, is_focused=mode_focus, val_width=20)
+    draw_field(stdscr, 9, 2, "Mode", mode_str, is_focused=mode_focus, val_width=22, right_edge=left_right_edge)
 
     # Field 6: Run Name
     name_focus = is_lora_left and state.lora_left_focus_idx == 6
     name_disp = state.lora_config.name or "<auto>"
-    if len(name_disp) > left_w - 14:
-        name_disp = "…" + name_disp[-(left_w - 15):]
-    draw_field(stdscr, 10, 2, "Run Name", name_disp, is_focused=name_focus, val_width=left_w - 16)
+    if len(name_disp) > left_w - 18:
+        name_disp = "…" + name_disp[-(left_w - 19):]
+    draw_field(stdscr, 10, 2, "Run Name", name_disp, is_focused=name_focus, val_width=max(14, left_w - 18), right_edge=left_right_edge)
 
-    # 2. Right Panel: Hyperparameters & Unified Memory Estimator
+    # 2. Right Panel: Hyperparameters (Single Column, Ordered Sequentially, Right-Aligned)
     wb = state.get_wandb_status()
     if wb["enabled"]:
         wb_badge = f"W&B: @{wb.get('entity') or 'active'} ({wb.get('project')})"
@@ -649,49 +659,91 @@ def _draw_mode2_dashboard(
         left_w,
         panel_h,
         right_w,
-        "LoRA Hyperparameters & Unified Memory Estimator",
+        "LoRA Hyperparameters",
         is_focused=is_lora_right,
-        subtitle=f"Step 2: Config │ {wb_badge}",
+        subtitle="Step 2: Config",
     )
 
-    col1_x = left_w + 2
-    col2_x = left_w + 2 + max(18, (right_w - 4) // 2)
-    col_v_w = max(6, min(10, (right_w - 4) // 4 - 3))
+    right_edge = max_x - 3
+    inner_h = max(1, panel_h - 2)
+    cfg = state.lora_config
 
-    draw_field(stdscr, 2, col1_x, "Iters", str(state.lora_config.iters), is_focused=(is_lora_right and state.lora_right_focus_idx == 0), val_width=col_v_w)
-    draw_field(stdscr, 2, col2_x, "Batch", str(state.lora_config.batch_size), is_focused=(is_lora_right and state.lora_right_focus_idx == 1), val_width=col_v_w)
+    fields_def = [
+        (0, "Training Iterations", str(cfg.iters), 10, False),
+        (1, "Batch Size", str(cfg.batch_size), 8, False),
+        (2, "Learning Rate", f"{cfg.learning_rate:g}", 12, False),
+        (3, "LoRA Rank (r)", str(cfg.lora_rank), 8, False),
+        (4, "LoRA Alpha (α)", f"{cfg.lora_alpha:g}", 8, False),
+        (5, "LoRA Dropout", f"{cfg.lora_dropout:g}", 8, False),
+        (6, "Max Seq Length", str(cfg.max_seq_length), 10, False),
+        (7, "Fine-Tuned Layers", str(cfg.num_layers), 8, False),
+        (8, "Grad Checkpoint", "[X] True" if cfg.grad_checkpoint else "[ ] False", 12, False),
+        (9, "Mask Prompt", "[X] True" if cfg.mask_prompt else "[ ] False", 12, False),
+        (10, "Save Every", str(cfg.save_every), 8, False),
+        (11, "Steps per Eval", str(cfg.steps_per_eval), 8, False),
+        (12, "Adapter Path", cfg.adapter_path, max(14, right_w - 20), False),
+        (13, "+ Add to Queue (F6)", "", 0, True),
+    ]
 
-    draw_field(stdscr, 3, col1_x, "LR", f"{state.lora_config.learning_rate:g}", is_focused=(is_lora_right and state.lora_right_focus_idx == 2), val_width=col_v_w)
-    draw_field(stdscr, 3, col2_x, "Rank", str(state.lora_config.lora_rank), is_focused=(is_lora_right and state.lora_right_focus_idx == 3), val_width=col_v_w)
+    # Handle smooth scrolling in single-column hyperparameter list if panel_h < 16
+    if state.lora_right_focus_idx < state.lora_right_scroll_offset:
+        state.lora_right_scroll_offset = state.lora_right_focus_idx
+    elif state.lora_right_focus_idx >= state.lora_right_scroll_offset + inner_h:
+        state.lora_right_scroll_offset = state.lora_right_focus_idx - inner_h + 1
+    scroll_off = state.lora_right_scroll_offset
 
-    draw_field(stdscr, 4, col1_x, "Alpha", f"{state.lora_config.lora_alpha:g}", is_focused=(is_lora_right and state.lora_right_focus_idx == 4), val_width=col_v_w)
-    draw_field(stdscr, 4, col2_x, "Dropout", f"{state.lora_config.lora_dropout:g}", is_focused=(is_lora_right and state.lora_right_focus_idx == 5), val_width=col_v_w)
+    for idx_in_view in range(min(inner_h, len(fields_def) - scroll_off)):
+        f_idx = scroll_off + idx_in_view
+        f_num, f_label, f_val, f_val_w, is_btn = fields_def[f_idx]
+        f_y = 2 + idx_in_view
+        is_foc = is_lora_right and (state.lora_right_focus_idx == f_num)
 
-    draw_field(stdscr, 5, col1_x, "SeqLen", str(state.lora_config.max_seq_length), is_focused=(is_lora_right and state.lora_right_focus_idx == 6), val_width=col_v_w)
-    draw_field(stdscr, 5, col2_x, "Layers", str(state.lora_config.num_layers), is_focused=(is_lora_right and state.lora_right_focus_idx == 7), val_width=col_v_w)
+        if is_btn:
+            btn_str = "+ Add to Queue (F6)"
+            btn_w = len(btn_str) + 4
+            draw_button(stdscr, f_y, right_edge - btn_w + 1, btn_str, is_focused=is_foc)
+        else:
+            draw_field(stdscr, f_y, left_w + 2, f_label, f_val, is_focused=is_foc, val_width=f_val_w, right_edge=right_edge)
 
-    chk_str = "[X] True" if state.lora_config.grad_checkpoint else "[ ] False"
-    mask_str = "[X] True" if state.lora_config.mask_prompt else "[ ] False"
-    draw_field(stdscr, 6, col1_x, "GradChk", chk_str, is_focused=(is_lora_right and state.lora_right_focus_idx == 8), val_width=col_v_w)
-    draw_field(stdscr, 6, col2_x, "MaskPmt", mask_str, is_focused=(is_lora_right and state.lora_right_focus_idx == 9), val_width=col_v_w)
+    # Visual scroll indicators for Right Panel
+    if scroll_off > 0:
+        safe_addstr(stdscr, 1, max_x - 4, "▲", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+    if scroll_off + inner_h < len(fields_def):
+        safe_addstr(stdscr, panel_h, max_x - 4, "▼", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
 
-    draw_field(stdscr, 7, col1_x, "SaveEv", str(state.lora_config.save_every), is_focused=(is_lora_right and state.lora_right_focus_idx == 10), val_width=col_v_w)
-    draw_field(stdscr, 7, col2_x, "StepsEval", str(state.lora_config.steps_per_eval), is_focused=(is_lora_right and state.lora_right_focus_idx == 11), val_width=col_v_w)
+    # 3. Middle Panel: Resource & Training Estimates (Implied Epochs, Peak RAM, Duration)
+    draw_box_panel(
+        stdscr,
+        vis_y,
+        0,
+        vis_h,
+        max_x,
+        "Resource & Training Estimates (Apple Silicon Unified Memory)",
+        is_focused=False,
+        subtitle=wb_badge,
+    )
 
-    ad_disp = state.lora_config.adapter_path
-    if len(ad_disp) > col_v_w + 4:
-        ad_disp = "…" + ad_disp[-(col_v_w + 3):]
-    draw_field(stdscr, 8, col1_x, "Adapter", ad_disp, is_focused=(is_lora_right and state.lora_right_focus_idx == 12), val_width=col_v_w)
-    draw_button(stdscr, 8, col2_x, "+ Add to Queue (F6)", is_focused=(is_lora_right and state.lora_right_focus_idx == 13))
-
-    safe_addstr(stdscr, 9, col1_x, "─" * (right_w - 4), (get_color(COLOR_BORDER_JOINTS) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
-
+    # Implied Epochs (Row 1)
     epochs = state.get_implied_epochs()
-    if epochs is not None:
-        safe_addstr(stdscr, 10, col1_x, f"• Implied Epochs: {epochs:.2f} epochs", (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-    else:
-        safe_addstr(stdscr, 10, col1_x, "• Implied Epochs: (train.jsonl needed for exact calculation)", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+    train_count = 0
+    if state.loaded_dataset:
+        train_count = state.get_split_counts().get("train", 0)
+    elif state.lora_config.data:
+        tf = Path(state.lora_config.data) / "train.jsonl"
+        if tf.exists():
+            try:
+                with open(tf, "rb") as f:
+                    train_count = sum(1 for _ in f)
+            except Exception:
+                pass
 
+    if epochs is not None:
+        epochs_str = f"• Implied Epochs:   {epochs:.2f} epochs  [(iters: {cfg.iters:,} × batch: {cfg.batch_size}) / {train_count:,} train records]"
+        safe_addstr(stdscr, vis_y + 1, 2, epochs_str[:max_x - 4], (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
+    else:
+        safe_addstr(stdscr, vis_y + 1, 2, "• Implied Epochs:   (Select or specify dataset containing train.jsonl to calculate implied epochs)", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+
+    # Peak Unified RAM & Safety Rating (Row 2)
     mem_est = state.get_memory_estimate()
     lvl = mem_est.get("safety_level", "SAFE")
     if lvl == "SAFE":
@@ -700,54 +752,53 @@ def _draw_mode2_dashboard(
         lvl_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
     else:
         lvl_attr = (get_color(COLOR_ERROR) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
-    safe_addstr(stdscr, 11, col1_x, f"• {mem_est.get('badge', '')}"[:right_w - 4], lvl_attr)
+    ram_line = f"• Peak Unified RAM: {mem_est.get('badge', '')}  [{lvl}]  ({mem_est.get('safety_desc', '')})"
+    safe_addstr(stdscr, vis_y + 2, 2, ram_line[:max_x - 4], lvl_attr)
 
+    # Memory Breakdown (Row 3)
+    breakdown_line = f"  RAM Breakdown:    Base Model: {mem_est.get('base_model_gb', 0):.1f} GB │ Activations: {mem_est.get('activations_gb', 0):.1f} GB │ LoRA Optimizer (fp32): {mem_est.get('optimizer_gb', 0):.1f} GB"
+    safe_addstr(stdscr, vis_y + 3, 2, breakdown_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+
+    # Duration & Throughput (Row 4)
     dur_est = state.get_duration_estimate()
-    dur_line = f"• Est. Duration: ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')})"
-    safe_addstr(stdscr, 12, col1_x, dur_line[:right_w - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if curses.has_colors() else curses.A_DIM)
+    dur_line = f"• Est. Duration:     ~{dur_est.get('duration_str', '1m')} (ETA: {dur_est.get('eta_clock', 'N/A')}) │ Hardware: {mem_est.get('chip_name', 'Apple Silicon')} ({mem_est.get('total_gb', 16):.0f} GB Unified RAM)"
+    safe_addstr(stdscr, vis_y + 4, 2, dur_line[:max_x - 4], (get_color(COLOR_NORMAL_TEXT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
 
-    # 3. Middle Panel: Central Queue & Config Browser
+    # Recommendation / Guidance (Row 5 if vis_h >= 7)
+    if vis_h >= 7:
+        if lvl == "SAFE":
+            rec = "  Recommendation:   Headroom is optimal for fine-tuning. Weights, activations, and AdamW states fit safely."
+            r_attr = get_color(COLOR_SUCCESS) if curses.has_colors() else 0
+        elif lvl == "TIGHT":
+            rec = "  Recommendation:   Unified memory is tight (>70%). Close background applications before launching fine-tuning."
+            r_attr = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        else:
+            rec = "  Recommendation:   HIGH OOM RISK (>85%)! Enable Gradient Checkpointing or reduce batch size to avoid kernel panics."
+            r_attr = (get_color(COLOR_ERROR) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD
+        safe_addstr(stdscr, vis_y + 5, 2, rec[:max_x - 4], r_attr)
+
+    # 4. Bottom Panel: Queued Runs (with Config Spec displayed underneath each run)
     runs_list = state.queue_manager.runs if state.queue_manager else []
     draw_box_panel(
         stdscr,
-        vis_y,
+        queue_y,
         0,
-        vis_h,
+        queue_h,
         max_x,
-        "Fine-Tuning Queue & Config Browser",
+        "Fine-Tuning Queue (Sequential Execution)",
         is_focused=is_lora_queue,
-        subtitle=f"{len(runs_list)} run(s) queued",
+        subtitle=f"{len(runs_list)} run(s) queued │ F5: Run Queue │ c: Clone │ d: Delete │ x: Clear │ Enter: Load",
     )
     state.selected_queue_idx = draw_queue_table(
         stdscr,
-        vis_y + 1,
+        queue_y + 1,
         2,
-        vis_h - 2,
+        queue_h - 2,
         max_x - 4,
         runs_list,
         selected_idx=state.selected_queue_idx,
         is_focused=is_lora_queue,
     )
-
-    # 4. Bottom Panel: Live MLX Command & YAML Preview
-    draw_box_panel(
-        stdscr,
-        preview_y,
-        0,
-        preview_h,
-        max_x,
-        "Live LoRA Command & YAML Preview (mlx_lm.lora)",
-        is_focused=False,
-        subtitle="CLI / YAML",
-    )
-    cmd_text = state.lora_config.to_cli_command()
-    safe_addstr(stdscr, preview_y + 1, 2, "Command: ", (get_color(COLOR_LABEL_GRAY) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-    safe_addstr(stdscr, preview_y + 1, 11, cmd_text[:max_x - 13], (get_color(COLOR_INPUT_NORMAL) | curses.A_BOLD) if curses.has_colors() else curses.A_BOLD)
-
-    if preview_h >= 4:
-        cfg = state.lora_config
-        summary_line = f"Config Spec: iters={cfg.iters} | batch={cfg.batch_size} | lr={cfg.learning_rate:g} | rank={cfg.lora_rank} | alpha={cfg.lora_alpha:g} | layers={cfg.num_layers} | grad_chk={cfg.grad_checkpoint} | mask_pmt={cfg.mask_prompt}"
-        safe_addstr(stdscr, preview_y + 2, 2, summary_line[:max_x - 4], get_color(COLOR_NORMAL_TEXT) if curses.has_colors() else curses.A_DIM)
 
 
 def _handle_mode1_input(
@@ -1038,17 +1089,11 @@ def _handle_mode2_input(
     # Navigation in Right Panel (Hyperparameters)
     elif state.lora_active_panel == "right":
         if key in (curses.KEY_UP, ord("k")):
-            state.lora_right_focus_idx = max(0, state.lora_right_focus_idx - 2)
+            state.lora_right_focus_idx = max(0, state.lora_right_focus_idx - 1)
         elif key in (curses.KEY_DOWN, ord("j")):
-            state.lora_right_focus_idx = min(13, state.lora_right_focus_idx + 2)
+            state.lora_right_focus_idx = min(13, state.lora_right_focus_idx + 1)
         elif key in (curses.KEY_LEFT, ord("h")):
-            if state.lora_right_focus_idx % 2 == 1:
-                state.lora_right_focus_idx -= 1
-            else:
-                state.lora_active_panel = "left"
-        elif key in (curses.KEY_RIGHT, ord("l")):
-            if state.lora_right_focus_idx % 2 == 0 and state.lora_right_focus_idx < 13:
-                state.lora_right_focus_idx += 1
+            state.lora_active_panel = "left"
         elif key in (10, 13, curses.KEY_ENTER, 32):  # Enter or Space
             idx = state.lora_right_focus_idx
             if idx == 0:  # Iters

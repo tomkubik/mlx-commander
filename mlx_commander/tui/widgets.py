@@ -1456,63 +1456,43 @@ def draw_queue_table(
     scroll_offset: int = 0,
 ) -> int:
     """
-    Draw a scrollable table of queued LoRA runs with columns:
-    Index, Name / Model, Batch, Iters, LR, Rank, Layers, Status.
-    Returns the adjusted scroll_offset.
+    Draw a scrollable table of queued LoRA runs where every run displays
+    its full hyperparameter configuration specification directly underneath.
+    Returns selected_idx.
     """
     if h < 2 or w < 30:
-        return 0
+        return selected_idx
 
     header_y = y
     avail_rows = h - 1
 
-    # Fixed column widths
-    col_idx = f"{'#':<3}"
-    col_status = f"{'Status':<9}"
-    col_b = f"{'Batch':<5}"
-    col_it = f"{'Iters':<6}"
-    col_lr = f"{'LR':<7}"
-    col_r = f"{'Rank':<4}"
-    col_l = f"{'Lyrs':<4}"
-
-    fixed_w = len(col_idx) + 1 + len(col_b) + 1 + len(col_it) + 1 + len(col_lr) + 1 + len(col_r) + 1 + len(col_l) + 1 + len(col_status)
-    name_w = max(12, w - fixed_w - 4)
-
-    header_line = f" {col_idx} {'Run Name / Model':<{name_w}} {col_b} {col_it} {col_lr} {col_r} {col_l} {col_status}"
-    safe_addstr(win, header_y, x, header_line[:w], (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD)
-
     if not runs:
-        safe_addstr(win, header_y + 1, x + 2, "(Queue is empty. Press [F6] to add current configuration to queue)", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
-        return 0
+        safe_addstr(win, header_y, x + 2, "(Queue is empty. Configure parameters above and press [+ Add to Queue (F6)] to stage runs)", (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM)
+        return selected_idx
 
-    # Adjust scroll_offset
+    # Use 2-row stride so every run displays its config spec underneath
+    row_stride = 2 if avail_rows >= 4 else 1
+    avail_items = max(1, avail_rows // row_stride)
+
+    # Adjust scroll offset
     if selected_idx < scroll_offset:
         scroll_offset = selected_idx
-    elif selected_idx >= scroll_offset + avail_rows:
-        scroll_offset = selected_idx - avail_rows + 1
+    elif selected_idx >= scroll_offset + avail_items:
+        scroll_offset = selected_idx - avail_items + 1
 
-    for r_i in range(avail_rows):
+    for r_i in range(avail_items):
         idx = scroll_offset + r_i
-        row_y = header_y + 1 + r_i
+        row_y = header_y + r_i * row_stride
         if idx >= len(runs):
             break
 
         run = runs[idx]
         is_sel = (idx == selected_idx)
-        prefix = "▶" if is_sel else " "
+        prefix = "▶ " if is_sel else "  "
 
         idx_str = f"{idx + 1}."
         name_str = getattr(run, "name", "") or getattr(run, "model", "").split("/")[-1]
-        if len(name_str) > name_w:
-            name_str = name_str[:name_w - 1] + "…"
-
-        b_str = str(getattr(run, "batch_size", 4))
-        it_str = str(getattr(run, "iters", 1000))
-        lr_raw = getattr(run, "learning_rate", 1e-5)
-        lr_str = f"{lr_raw:g}"
-        r_str = str(getattr(run, "lora_rank", 8))
-        l_str = str(getattr(run, "num_layers", 16))
-
+        
         status_raw = getattr(run, "status", "queued").lower()
         if status_raw == "running":
             st_text = "[RUNNING]"
@@ -1527,26 +1507,63 @@ def draw_queue_table(
             st_text = "[QUEUED]"
             st_attr = (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
 
-        row_main = f"{prefix}{idx_str:<3} {name_str:<{name_w}} {b_str:<5} {it_str:<6} {lr_str:<7} {r_str:<4} {l_str:<4} "
-        row_str = f"{row_main}{st_text:<9}"
+        # Header line for this run: Index + Name + Status
+        status_len = len(st_text)
+        max_name_w = max(10, w - len(prefix) - len(idx_str) - status_len - 4)
+        if len(name_str) > max_name_w:
+            name_disp = name_str[:max_name_w - 1] + "…"
+        else:
+            name_disp = name_str
+
+        pad_w = max(1, w - len(prefix) - len(idx_str) - 1 - len(name_disp) - status_len - 2)
+        row_line = f"{prefix}{idx_str} {name_disp}{' ' * pad_w}{st_text}"
 
         if is_sel and is_focused:
-            attr = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
-            safe_addstr(win, row_y, x, row_str[:w], attr)
+            attr_line1 = (get_color(COLOR_INPUT_FOCUSED) | curses.A_BOLD) if safe_has_colors() else curses.A_STANDOUT
+            safe_addstr(win, row_y, x, row_line[:w], attr_line1)
         elif is_sel:
-            attr = (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
-            safe_addstr(win, row_y, x, row_main[:w], attr)
-            st_x = x + len(row_main)
-            if st_x < x + w:
-                safe_addstr(win, row_y, st_x, st_text[:(x + w - st_x)], st_attr)
+            attr_line1 = (get_color(COLOR_BORDER_JOINTS) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+            safe_addstr(win, row_y, x, row_line[:w], attr_line1)
+            # Accentuate status badge
+            st_pos = x + len(row_line) - status_len
+            if st_pos < x + w:
+                safe_addstr(win, row_y, st_pos, st_text[:x + w - st_pos], st_attr)
         else:
-            attr = get_color(COLOR_NORMAL_TEXT) if safe_has_colors() else 0
-            safe_addstr(win, row_y, x, row_main[:w], attr)
-            st_x = x + len(row_main)
-            if st_x < x + w:
-                safe_addstr(win, row_y, st_x, st_text[:(x + w - st_x)], st_attr)
+            attr_line1 = get_color(COLOR_NORMAL_TEXT) if safe_has_colors() else 0
+            safe_addstr(win, row_y, x, row_line[:w], attr_line1)
+            st_pos = x + len(row_line) - status_len
+            if st_pos < x + w:
+                safe_addstr(win, row_y, st_pos, st_text[:x + w - st_pos], st_attr)
 
-    return scroll_offset
+        # Underneath line: Full Config Specification
+        if row_stride == 2 and (row_y + 1) < (header_y + avail_rows):
+            model_slug = getattr(run, "model", "").split("/")[-1]
+            cfg_parts = [
+                f"model={model_slug}",
+                f"iters={getattr(run, 'iters', 1000)}",
+                f"batch={getattr(run, 'batch_size', 4)}",
+                f"lr={getattr(run, 'learning_rate', 1e-5):g}",
+                f"rank={getattr(run, 'lora_rank', 8)}",
+                f"alpha={getattr(run, 'lora_alpha', 16.0):g}",
+                f"layers={getattr(run, 'num_layers', 16)}",
+                f"grad_chk={getattr(run, 'grad_checkpoint', True)}",
+            ]
+            wandb_u = getattr(run, "wandb_url", None)
+            if wandb_u:
+                cfg_parts.append(f"W&B={wandb_u}")
+
+            spec_line = f"     Config: {' │ '.join(cfg_parts)}"
+
+            if is_sel and is_focused:
+                attr_line2 = (get_color(COLOR_TITLE_ACCENT) | curses.A_BOLD) if safe_has_colors() else curses.A_BOLD
+            elif is_sel:
+                attr_line2 = (get_color(COLOR_NORMAL_TEXT) | curses.A_DIM) if safe_has_colors() else curses.A_DIM
+            else:
+                attr_line2 = (get_color(COLOR_LABEL_GRAY) | curses.A_DIM) if safe_has_colors() else curses.A_DIM
+
+            safe_addstr(win, row_y + 1, x, spec_line[:w], attr_line2)
+
+    return selected_idx
 
 
 def show_model_picker_dialog(

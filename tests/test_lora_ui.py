@@ -125,3 +125,25 @@ class TestLoraUI(unittest.TestCase):
             is_focused=True,
         )
         self.assertEqual(selected, 0)
+
+    @patch("mlx_commander.tui.app.curses.has_colors", return_value=False)
+    @patch("mlx_commander.tui.app.init_colors")
+    @patch("mlx_commander.tui.app.curses.curs_set")
+    def test_single_column_hyperparameter_navigation(self, mock_curs, mock_colors, mock_has_colors):
+        state = CommanderState()
+        state.active_tab = 1
+        state.lora_active_panel = "right"
+        state.lora_right_focus_idx = 0
+
+        # Press KEY_DOWN (should go from 0 -> 1), then KEY_DOWN (1 -> 2), then KEY_UP (2 -> 1), then KEY_LEFT (to left panel), then 'q'
+        self.mock_win.getch.side_effect = [
+            curses.KEY_DOWN,
+            curses.KEY_DOWN,
+            curses.KEY_UP,
+            curses.KEY_LEFT,
+            ord("q"),
+        ]
+        run_commander_tui(self.mock_win, initial_state=state)
+        self.assertEqual(state.lora_right_focus_idx, 1)
+        self.assertEqual(state.lora_active_panel, "left")
+
